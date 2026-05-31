@@ -32,18 +32,15 @@ export interface FichaNinez {
   referenciado_salud: boolean;
   consumo_activo: boolean;
   violencia_familiar: boolean;
-  observaciones: string; // Will store JSON of FichaNinezObservaciones
+  observaciones: string;
 }
 
 export interface FichaNinezObservaciones {
   ano_escolar?: string;
-  // Conditional Consumption Fields
   consumo_sustancias?: string;
   consumo_contexto?: string;
   consumo_familiar?: string;
-  // Conditional Violence Fields
   violencia_detalle?: string;
-  // Custom free text observations
   texto_libre?: string;
 }
 
@@ -55,19 +52,29 @@ export interface FichaDia {
   situacion_habitacional: string;
   consumo_activo: boolean;
   violencia_familiar: boolean;
-  observaciones: string; // Will store JSON of FichaDiaObservaciones
+  observaciones: string;
 }
 
 export interface FichaDiaObservaciones {
   condicion_actual?: string;
-  // Conditional Consumption Fields
   consumo_sustancias?: string;
   consumo_contexto?: string;
   consumo_familiar?: string;
-  // Conditional Violence Fields
   violencia_detalle?: string;
-  // Custom free text observations
   texto_libre?: string;
+  // Salud
+  obra_social?: string;
+  tiene_medicacion?: boolean;
+  medicacion_detalle?: string;
+  movilidad?: string;
+  diagnosticos?: string;
+  // Discapacidad
+  tiene_discapacidad?: boolean;
+  discapacidad_detalle?: string;
+  // Situación social
+  vive_solo?: boolean;
+  red_apoyo_familiar?: boolean;
+  tiene_jubilacion?: boolean;
 }
 
 export interface UserRole {
@@ -85,15 +92,17 @@ export interface HistorialSeguimiento {
   valor_anterior: string | null;
   valor_nuevo: string | null;
   user_id: string | null;
-  // Joined fields for display
   operador_email?: string;
 }
 
+// Tutor actualizado — multi-tutor por vinculo
 export interface Tutor {
-  id: number;
+  id?: number;
+  vinculo_id?: number;
   nombre: string;
   telefono: string;
-  dni_nino: string;
+  relacion?: string;
+  created_at?: string;
 }
 
 export interface RegistroAsistencia {
@@ -105,7 +114,6 @@ export interface RegistroAsistencia {
   registrado_por: string | null;
 }
 
-// Complete profile object for easy handling in the app
 export interface PersonaCompleta {
   persona: Persona;
   vinculo: Vinculo;

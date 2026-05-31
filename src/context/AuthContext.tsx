@@ -23,9 +23,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [dispositivoNombre, setDispositivoNombre] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchProfile = async (currentUser: User) => {
+  // fetchProfile ahora devuelve el rol encontrado
+  // setLoading(false) lo maneja el llamador DESPUÉS de que esto termine
+  const fetchProfile = async (currentUser: User): Promise<void> => {
+    console.log('fetchProfile START for user:', currentUser.id);
     try {
-      // 1. Query the user_roles table for this user
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('role, dispositivo_id, email')
@@ -39,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let activeRole: 'operador' | 'fundacion' | null = rolesData?.role || null;
       let activeDispositivoId: number | null = rolesData?.dispositivo_id || null;
 
-      // Backfill email if the row exists but email is missing
+      // Backfill email si falta
       if (rolesData && !rolesData.email && currentUser.email) {
         await supabase
           .from('user_roles')
@@ -47,14 +49,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq('user_id', currentUser.id);
       }
 
-      // 2. If no role exists, check if this is the FIRST user in the database
+      // Primer usuario → promover a fundacion automáticamente
       if (!rolesData) {
         const { count, error: countError } = await supabase
           .from('user_roles')
           .select('*', { count: 'exact', head: true });
 
         if (!countError && count === 0) {
-          // No users exist in user_roles. Automatically promote this first user to 'fundacion'
           const { data: newRole, error: insertError } = await supabase
             .from('user_roles')
             .insert({
@@ -68,17 +69,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!insertError && newRole) {
             activeRole = newRole.role;
             activeDispositivoId = newRole.dispositivo_id;
-            console.log('Automatically promoted first registered user to fundacion.');
+            console.log('Primer usuario promovido a fundacion automáticamente.');
           } else {
-            console.error('Failed to auto-promote first user to fundacion:', insertError);
+            console.error('Error al promover primer usuario:', insertError);
           }
         }
       }
 
+      // Setear rol y dispositivo
       setRole(activeRole);
       setDispositivoId(activeDispositivoId);
 
-      // 3. Fetch device name if there's a device assigned
+      // Fetch nombre del dispositivo
       if (activeDispositivoId) {
         const { data: devData, error: devError } = await supabase
           .from('dispositivo')
@@ -94,8 +96,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setDispositivoNombre(null);
       }
+
+      console.log('fetchProfile END — role:', activeRole, 'dispositivo:', activeDispositivoId);
     } catch (err) {
-      console.error('Error in profile retrieval:', err);
+      console.error('Error en fetchProfile:', err);
     }
   };
 
@@ -106,93 +110,99 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Safety timeout: force loading to false after 3.5 seconds if auth check hangs
+    let isMounted = true;
+    let subscription: { unsubscribe: () => void } | null = null;
+    let loadedUserId: string | null = null;
+
+    // Safety timeout to prevent infinite loading screen
     const safetyTimeout = setTimeout(() => {
-      console.warn('FundaData safety timeout: Auth loading took too long, forcing load state to false.');
-      setLoading(false);
-    }, 3500);
-
-    // Check active session on mount
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user)
-            .then(() => {
-              clearTimeout(safetyTimeout);
-              setLoading(false);
-            })
-            .catch((err) => {
-              console.error('Error fetching profile on mount:', err);
-              clearTimeout(safetyTimeout);
-              setLoading(false);
-            });
-        } else {
-          clearTimeout(safetyTimeout);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to get session on mount:', err);
-        clearTimeout(safetyTimeout);
+      if (isMounted) {
+        console.warn('Safety timeout — forzando loading false');
         setLoading(false);
-      });
+      }
+    }, 15000);
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      let localTimeout: any = null;
+    const initializeAuth = async () => {
       try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        if (!isMounted) return;
+
         setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          // Only show loading screen if transitioning to SIGNED_IN state
-          if (event === 'SIGNED_IN') {
-            setLoading(true);
-            localTimeout = setTimeout(() => {
-              console.warn('FundaData safety timeout: Auth change loading took too long, forcing load state to false.');
-              setLoading(false);
-            }, 3500);
-          }
-          await fetchProfile(session.user);
-          if (localTimeout) clearTimeout(localTimeout);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          loadedUserId = currentUser.id;
+          await fetchProfile(currentUser);
+        }
+      } catch (err) {
+        console.error('Error al inicializar sesión:', err);
+      } finally {
+        if (isMounted) {
           setLoading(false);
+          clearTimeout(safetyTimeout);
+        }
+      }
+
+      if (!isMounted) return;
+
+      // Escuchar cambios de auth
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+
+        console.log('onAuthStateChange event:', event, 'user:', session?.user?.id);
+
+        const currentUser = session?.user ?? null;
+        setSession(session);
+        setUser(currentUser);
+
+        if (currentUser) {
+          if (currentUser.id !== loadedUserId) {
+            loadedUserId = currentUser.id;
+            setLoading(true);
+            try {
+              await fetchProfile(currentUser);
+            } catch (err) {
+              console.error('fetchProfile error in auth event:', err);
+            } finally {
+              if (isMounted) setLoading(false);
+            }
+          }
         } else {
+          loadedUserId = null;
           setRole(null);
           setDispositivoId(null);
           setDispositivoNombre(null);
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
-      } catch (err) {
-        console.error('Error handling auth state change:', err);
-        if (localTimeout) clearTimeout(localTimeout);
-        setLoading(false);
-      }
-    });
+      });
+
+      subscription = data.subscription;
+    };
+
+    initializeAuth();
 
     return () => {
+      isMounted = false;
       clearTimeout(safetyTimeout);
-      subscription.unsubscribe();
+      if (subscription) {
+        subscription.unsubscribe();
+      }
     };
   }, []);
 
   const signOut = async () => {
-    // Clear local state instantly so the UI redirects immediately
     setUser(null);
     setSession(null);
     setRole(null);
     setDispositivoId(null);
     setDispositivoNombre(null);
     setLoading(false);
-
-    // Run the Supabase auth API logout in the background
-    try {
-      supabase.auth.signOut().catch((err) => {
-        console.error('Background Supabase signout failed:', err);
-      });
-    } catch (err) {
-      console.error('Error initiating background sign out:', err);
-    }
+    supabase.auth.signOut().catch((err) => {
+      console.error('Error en signOut:', err);
+    });
   };
 
   return (
