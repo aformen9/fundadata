@@ -1,53 +1,78 @@
 import React from 'react';
 
-// 1. Bar Chart for Active People by Device
+// 1. Bar Chart — Active people by device
 interface BarChartProps {
   data: { label: string; value: number }[];
 }
 
 export const BarChart: React.FC<BarChartProps> = ({ data }) => {
   const maxValue = Math.max(...data.map((d) => d.value), 1);
+  const colors = [
+    'from-emerald-500 to-teal-400',
+    'from-violet-500 to-purple-400',
+    'from-amber-500 to-orange-400',
+    'from-sky-500 to-blue-400',
+    'from-rose-500 to-pink-400',
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="h-64 flex items-end gap-3 sm:gap-6 pt-4 pb-2 px-2 border-b border-slate-800">
+    <div className="space-y-3">
+      {/* Grid lines */}
+      <div className="relative h-52 flex items-end gap-2 sm:gap-3 pb-1 pt-6 pl-8">
+        {/* Background grid */}
+        <div className="absolute inset-0 flex flex-col justify-between pb-1 pt-5 pointer-events-none">
+          {[100, 75, 50, 25, 0].map((pct) => (
+            <div key={pct} className="flex items-center gap-2">
+              <span className="text-[9px] text-slate-600 font-mono w-4 shrink-0 text-right">
+                {pct === 0 ? '0' : Math.round((pct / 100) * maxValue)}
+              </span>
+              <div className="flex-1 border-t border-dashed border-slate-800/60" />
+            </div>
+          ))}
+        </div>
+
         {data.map((item, i) => {
           const heightPercent = (item.value / maxValue) * 100;
+          const color = colors[i % colors.length];
           return (
-            <div key={i} className="flex-1 flex flex-col items-center h-full justify-end group relative">
-              {/* Tooltip */}
-              <div className="absolute -top-6 scale-0 group-hover:scale-100 transition-all duration-150 bg-slate-800 text-white text-[11px] font-bold px-2 py-0.5 rounded shadow border border-slate-700 pointer-events-none">
-                {item.value} activos
+            <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+              {/* Custom Tooltip on Hover */}
+              <div className="absolute -top-8 bg-slate-950 text-slate-200 text-xs px-2.5 py-1 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 pointer-events-none border border-slate-700/50">
+                {item.label}
               </div>
-              
+
+              {/* Value label */}
+              <div className={`absolute text-[11px] font-black transition-all duration-300 ${
+                heightPercent > 15
+                  ? 'text-slate-950 bottom-1'
+                  : 'text-slate-300 bottom-[calc(var(--h)+4px)]'
+              }`}
+                style={{ '--h': `${heightPercent}%` } as any}
+              >
+                {item.value > 0 && (
+                  <span className="bg-slate-800/90 px-1.5 py-0.5 rounded text-[10px] text-slate-200 font-bold shadow">
+                    {item.value}
+                  </span>
+                )}
+              </div>
               {/* Bar */}
               <div
-                style={{ height: `${heightPercent}%` }}
-                className="w-full max-w-[40px] rounded-t-lg bg-gradient-to-t from-emerald-600 to-teal-400 group-hover:from-emerald-500 group-hover:to-teal-300 transition-all duration-500 shadow-lg shadow-emerald-500/10"
-              ></div>
+                style={{ height: `${heightPercent}%`, minHeight: item.value > 0 ? '4px' : '0' }}
+                className={`w-full max-w-[36px] rounded-t-xl bg-gradient-to-t ${color} transition-all duration-700 ease-out shadow-lg group-hover:opacity-80`}
+              />
             </div>
           );
         })}
-      </div>
-      {/* Labels */}
-      <div className="flex gap-3 sm:gap-6 px-2">
-        {data.map((item, i) => (
-          <div key={i} className="flex-1 text-center">
-            <p className="text-[10px] sm:text-xs font-medium text-slate-400 truncate" title={item.label}>
-              {item.label}
-            </p>
-          </div>
-        ))}
       </div>
     </div>
   );
 };
 
-// 2. Circular KPI Progress Gauge
+// 2. Progress Circle KPI
 interface ProgressCircleProps {
   percentage: number;
   label: string;
-  colorClass?: string; // 'emerald', 'amber', 'red', 'indigo'
+  colorClass?: string;
 }
 
 export const ProgressCircle: React.FC<ProgressCircleProps> = ({
@@ -55,47 +80,40 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
   label,
   colorClass = 'emerald',
 }) => {
-  const radius = 38;
+  const radius = 36;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
-  let colorStroke = 'stroke-emerald-500';
-  if (colorClass === 'amber') {
-    colorStroke = 'stroke-amber-500';
-  } else if (colorClass === 'red') {
-    colorStroke = 'stroke-red-500';
-  } else if (colorClass === 'indigo') {
-    colorStroke = 'stroke-indigo-500';
-  }
+  const colorMap: Record<string, { stroke: string; glow: string; text: string; bg: string }> = {
+    emerald: { stroke: '#10b981', glow: 'rgba(16,185,129,0.3)', text: 'text-emerald-400', bg: 'from-emerald-500/10 to-teal-400/5' },
+    amber:   { stroke: '#f59e0b', glow: 'rgba(245,158,11,0.3)',  text: 'text-amber-400',   bg: 'from-amber-500/10 to-orange-400/5' },
+    red:     { stroke: '#ef4444', glow: 'rgba(239,68,68,0.3)',   text: 'text-red-400',     bg: 'from-red-500/10 to-rose-400/5' },
+    indigo:  { stroke: '#6366f1', glow: 'rgba(99,102,241,0.3)',  text: 'text-indigo-400',  bg: 'from-indigo-500/10 to-violet-400/5' },
+  };
+
+  const c = colorMap[colorClass] || colorMap.emerald;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between shadow-sm">
-      <div className="space-y-1 pr-3">
-        <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">{label}</span>
-        <div className="text-2xl font-black text-white">{percentage.toFixed(1)}%</div>
+    <div className={`bg-gradient-to-br ${c.bg} border border-slate-800/60 rounded-2xl p-4 flex items-center justify-between gap-3 card-hover`}>
+      <div>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider leading-tight mb-1">{label}</p>
+        <p className={`text-2xl font-black ${c.text}`}>{percentage.toFixed(1)}%</p>
       </div>
-      <div className="relative w-20 h-20 shrink-0">
-        {/* Background circle */}
-        <svg className="w-full h-full -rotate-90">
+      <div className="relative w-16 h-16 shrink-0">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 88 88">
+          <circle cx="44" cy="44" r={radius} stroke="rgba(255,255,255,0.05)" strokeWidth="6" fill="transparent" />
           <circle
-            cx="40"
-            cy="40"
-            r={radius}
-            className="stroke-slate-800"
-            strokeWidth="6"
-            fill="transparent"
-          />
-          {/* Progress circle */}
-          <circle
-            cx="40"
-            cy="40"
-            r={radius}
-            className={`${colorStroke} transition-all duration-700 ease-out`}
+            cx="44" cy="44" r={radius}
+            stroke={c.stroke}
             strokeWidth="6"
             fill="transparent"
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
+            style={{
+              transition: 'stroke-dashoffset 1s ease-out',
+              filter: `drop-shadow(0 0 6px ${c.glow})`,
+            }}
           />
         </svg>
       </div>
@@ -103,76 +121,78 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
   );
 };
 
-// 3. Sex and Age Distribution Chart (Pyramid / Horizontal Bars)
+// 3. Age & Sex Distribution
 interface AgeDistProps {
-  data: {
-    range: string;
-    masculino: number;
-    femenino: number;
-    otro: number;
-  }[];
+  data: { range: string; masculino: number; femenino: number; otro: number }[];
 }
 
 export const AgeSexDistribution: React.FC<AgeDistProps> = ({ data }) => {
   const maxVal = Math.max(...data.map((d) => Math.max(d.masculino, d.femenino, d.otro)), 1);
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-5 text-center text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-850 pb-2">
-        <span className="col-span-1 text-left">Edad</span>
-        <span className="col-span-1 text-blue-400">Masc</span>
-        <span className="col-span-2">Distribución Visual</span>
-        <span className="col-span-1 text-rose-400 text-right">Fem / Otro</span>
+    <div className="space-y-3">
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-sky-500 inline-block" /> Masc.</div>
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-rose-500 inline-block" /> Fem.</div>
+        <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-violet-400 inline-block" /> Otro</div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {data.map((row, i) => {
           const mascWidth = (row.masculino / maxVal) * 100;
-          const femWidth = (row.femenino / maxVal) * 100;
-          const otroWidth = (row.otro / maxVal) * 100;
+          const femWidth  = (row.femenino  / maxVal) * 100;
+          const otroWidth = (row.otro      / maxVal) * 100;
+          const total     = row.masculino + row.femenino + row.otro;
 
           return (
-            <div key={i} className="grid grid-cols-5 items-center gap-2">
-              {/* Range */}
-              <div className="col-span-1 text-left text-xs font-semibold text-slate-300">
-                {row.range}
-              </div>
+            <div key={i} className="grid grid-cols-[40px_1fr_36px] items-center gap-3 group">
+              {/* Age range */}
+              <span className="text-xs font-bold text-slate-400">{row.range}</span>
 
-              {/* Male Count */}
-              <div className="col-span-1 text-center text-xs font-bold text-blue-400">
-                {row.masculino}
-              </div>
-
-              {/* Graphic bars centered */}
-              <div className="col-span-2 flex items-center justify-center gap-1">
-                {/* Male side (left) */}
-                <div className="flex-1 flex justify-end">
+              {/* Bars */}
+              <div className="flex items-center gap-0.5 h-5 rounded-lg overflow-hidden bg-slate-800/40">
+                {mascWidth > 0 && (
                   <div
-                    style={{ width: `${mascWidth}%` }}
-                    className="h-3 bg-blue-500 rounded-l transition-all duration-500 max-w-[80%]"
-                  ></div>
-                </div>
-                {/* Center separator line */}
-                <div className="w-[2px] h-4 bg-slate-800"></div>
-                {/* Female & Other side (right) */}
-                <div className="flex-1 flex gap-0.5">
+                    style={{ width: `${(row.masculino / (row.masculino + row.femenino + row.otro || 1)) * 100}%` }}
+                    className="h-full bg-sky-500/80 transition-all duration-700 ease-out"
+                    title={`Masculino: ${row.masculino}`}
+                  />
+                )}
+                {femWidth > 0 && (
                   <div
-                    style={{ width: `${femWidth}%` }}
-                    className="h-3 bg-rose-500 rounded-r transition-all duration-500 max-w-[70%]"
-                  ></div>
-                  {row.otro > 0 && (
-                    <div
-                      style={{ width: `${otroWidth}%` }}
-                      className="h-3 bg-violet-400 rounded-r transition-all duration-500 max-w-[30%]"
-                    ></div>
-                  )}
-                </div>
+                    style={{ width: `${(row.femenino / (row.masculino + row.femenino + row.otro || 1)) * 100}%` }}
+                    className="h-full bg-rose-500/80 transition-all duration-700 ease-out"
+                    title={`Femenino: ${row.femenino}`}
+                  />
+                )}
+                {otroWidth > 0 && (
+                  <div
+                    style={{ width: `${(row.otro / (row.masculino + row.femenino + row.otro || 1)) * 100}%` }}
+                    className="h-full bg-violet-400/80 transition-all duration-700 ease-out"
+                    title={`Otro: ${row.otro}`}
+                  />
+                )}
+                {total === 0 && <div className="w-full h-full" />}
               </div>
 
-              {/* Female & Other Count */}
-              <div className="col-span-1 text-right text-xs font-bold text-rose-400">
-                {row.femenino + row.otro} <span className="text-[10px] text-violet-400">({row.otro})</span>
-              </div>
+              {/* Total */}
+              <span className="text-xs font-black text-slate-300 text-right">{total}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Counts breakdown */}
+      <div className="mt-3 pt-3 border-t border-slate-800/60 grid grid-cols-3 text-center gap-2">
+        {['masculino', 'femenino', 'otro'].map((key) => {
+          const total = data.reduce((sum, row) => sum + (row as any)[key], 0);
+          const colors = { masculino: 'text-sky-400', femenino: 'text-rose-400', otro: 'text-violet-400' };
+          const labels = { masculino: 'Masculino', femenino: 'Femenino', otro: 'Otro' };
+          return (
+            <div key={key}>
+              <p className={`text-lg font-black ${(colors as any)[key]}`}>{total}</p>
+              <p className="text-[10px] text-slate-600 uppercase font-bold">{(labels as any)[key]}</p>
             </div>
           );
         })}

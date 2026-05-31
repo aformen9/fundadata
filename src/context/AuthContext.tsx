@@ -28,7 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Query the user_roles table for this user
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
-        .select('role, dispositivo_id')
+        .select('role, dispositivo_id, email')
         .eq('user_id', currentUser.id)
         .maybeSingle();
 
@@ -38,6 +38,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let activeRole: 'operador' | 'fundacion' | null = rolesData?.role || null;
       let activeDispositivoId: number | null = rolesData?.dispositivo_id || null;
+
+      // Backfill email if the row exists but email is missing
+      if (rolesData && !rolesData.email && currentUser.email) {
+        await supabase
+          .from('user_roles')
+          .update({ email: currentUser.email })
+          .eq('user_id', currentUser.id);
+      }
 
       // 2. If no role exists, check if this is the FIRST user in the database
       if (!rolesData) {

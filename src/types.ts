@@ -89,6 +89,22 @@ export interface HistorialSeguimiento {
   operador_email?: string;
 }
 
+export interface Tutor {
+  id: number;
+  nombre: string;
+  telefono: string;
+  dni_nino: string;
+}
+
+export interface RegistroAsistencia {
+  id: number;
+  dni: string;
+  dispositivo_id: number;
+  fecha: string;
+  presente: boolean;
+  registrado_por: string | null;
+}
+
 // Complete profile object for easy handling in the app
 export interface PersonaCompleta {
   persona: Persona;

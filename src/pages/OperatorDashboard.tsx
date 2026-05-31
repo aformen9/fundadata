@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import type { Persona, FichaNinezObservaciones, FichaDiaObservaciones, EstadoVinculo } from '../types';
-import { Search, UserPlus, Edit3, Save, ArrowLeft, ToggleLeft, ToggleRight, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Search, UserPlus, Edit3, Save, ArrowLeft, ToggleLeft, ToggleRight, Info, AlertTriangle, CheckCircle, CalendarDays, Phone, TrendingDown, Bell, ClipboardList, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PersonaConDetalle {
   dni: string;
@@ -35,6 +35,25 @@ interface PersonaConDetalle {
   consumo_familiar?: string;
   violencia_detalle?: string;
   texto_libre?: string;
+  // Tutor fields (ninez only)
+  tutor_id?: number;
+  tutor_nombre?: string;
+  tutor_telefono?: string;
+}
+
+interface AttendanceDetailRow {
+  dni: string;
+  nombre: string;
+  apellido: string;
+  faltasMes: number;
+  consecutivasActuales: number;
+}
+
+interface AttendanceStats {
+  presentesHoy: number;
+  ausentesHoy: number;
+  porcentajeMes: number;
+  faltasCriticas: number;
 }
 
 export const OperatorDashboard: React.FC = () => {
@@ -51,7 +70,7 @@ export const OperatorDashboard: React.FC = () => {
   const [existingActiveVinculo, setExistingActiveVinculo] = useState<any | null>(null);
 
   // Form states
-  const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit' | 'asistencia'>('list');
   const [selectedPerson, setSelectedPerson] = useState<PersonaConDetalle | null>(null);
   
   // General form inputs
@@ -88,6 +107,24 @@ export const OperatorDashboard: React.FC = () => {
   const [formViolenciaFamiliar, setFormViolenciaFamiliar] = useState(false);
   const [formViolenciaDetalle, setFormViolenciaDetalle] = useState('');
   const [formTextoLibre, setFormTextoLibre] = useState('');
+
+  // Tutor form states (ninez only)
+  const [formTutorNombre, setFormTutorNombre] = useState('');
+  const [formTutorTelefono, setFormTutorTelefono] = useState('');
+  const [existingTutorId, setExistingTutorId] = useState<number | null>(null);
+
+  // Attendance states
+  const [attendanceSubTab, setAttendanceSubTab] = useState<'marcar' | 'seguimiento'>('marcar');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [todayAttendanceMap, setTodayAttendanceMap] = useState<Record<string, boolean>>({});
+  const [attendanceAlreadySaved, setAttendanceAlreadySaved] = useState(false);
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  const [attendanceFilter, setAttendanceFilter] = useState('');
+  const [attendanceMinFaltas, setAttendanceMinFaltas] = useState('');
+  const [attendanceMinConsecutive, setAttendanceMinConsecutive] = useState('');
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats | null>(null);
+  const [attendanceDetailRows, setAttendanceDetailRows] = useState<AttendanceDetailRow[]>([]);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
 
   // Message notifications
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -158,6 +195,16 @@ export const OperatorDashboard: React.FC = () => {
               ...obs
             };
           }
+          const { data: tutorData } = await supabase
+            .from('tutor')
+            .select('id, nombre, telefono')
+            .eq('dni_nino', p.dni)
+            .maybeSingle();
+          if (tutorData) {
+            details.tutor_id = tutorData.id;
+            details.tutor_nombre = tutorData.nombre;
+            details.tutor_telefono = tutorData.telefono;
+          }
         } else if (dispositivoTipo === 'dia') {
           const { data: fd } = await supabase
             .from('ficha_dia')
@@ -211,6 +258,13 @@ export const OperatorDashboard: React.FC = () => {
       loadActivePeople();
     }
   }, [dispositivoId, dispositivoTipo]);
+
+  useEffect(() => {
+    if (viewMode === 'asistencia' && dispositivoId && activePeople.length > 0) {
+      loadTodayAttendance();
+      loadAttendanceStats();
+    }
+  }, [viewMode, activePeople.length]);
 
   // Search DNI
   const handleSearchDni = async (e: React.FormEvent) => {
@@ -280,6 +334,11 @@ export const OperatorDashboard: React.FC = () => {
         setFormViolenciaFamiliar(false);
         setFormViolenciaDetalle('');
         setFormTextoLibre('');
+
+        // Reset tutor
+        setFormTutorNombre('');
+        setFormTutorTelefono('');
+        setExistingTutorId(null);
 
         setViewMode('create');
       }
@@ -393,6 +452,11 @@ export const OperatorDashboard: React.FC = () => {
     setFormViolenciaDetalle(p.violencia_detalle || '');
     setFormTextoLibre(p.texto_libre || '');
 
+    // Set tutor fields (ninez only)
+    setFormTutorNombre(p.tutor_nombre || '');
+    setFormTutorTelefono(p.tutor_telefono || '');
+    setExistingTutorId(p.tutor_id || null);
+
     setViewMode('edit');
   };
 
@@ -410,6 +474,108 @@ export const OperatorDashboard: React.FC = () => {
       valor_nuevo: stringNew,
       user_id: user?.id
     });
+  };
+
+  // Attendance: load records for selected date
+  const loadTodayAttendance = async (date?: string) => {
+    if (!dispositivoId) return;
+    const target = date ?? selectedDate;
+    const { data } = await supabase
+      .from('registro_asistencia')
+      .select('dni, presente')
+      .eq('dispositivo_id', dispositivoId)
+      .eq('fecha', target);
+    const map: Record<string, boolean> = {};
+    for (const r of (data || [])) map[r.dni] = r.presente;
+    setTodayAttendanceMap(map);
+    setAttendanceAlreadySaved(Object.keys(map).length > 0);
+  };
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    setTodayAttendanceMap({});
+    loadTodayAttendance(newDate);
+  };
+
+  const shiftDate = (days: number) => {
+    const d = new Date(selectedDate + 'T12:00:00');
+    d.setDate(d.getDate() + days);
+    const newDate = d.toISOString().split('T')[0];
+    handleDateChange(newDate);
+  };
+
+  // Attendance: compute KPIs and per-person stats
+  const loadAttendanceStats = async () => {
+    if (!dispositivoId || activePeople.length === 0) return;
+    setLoadingAttendance(true);
+    const today = new Date().toISOString().split('T')[0];
+    const monthStart = today.substring(0, 7) + '-01';
+
+    const { data: monthRecords } = await supabase
+      .from('registro_asistencia')
+      .select('dni, fecha, presente')
+      .eq('dispositivo_id', dispositivoId)
+      .gte('fecha', monthStart)
+      .lte('fecha', today)
+      .order('fecha', { ascending: false });
+
+    const byPerson: Record<string, { fecha: string; presente: boolean }[]> = {};
+    for (const r of (monthRecords || [])) {
+      if (!byPerson[r.dni]) byPerson[r.dni] = [];
+      byPerson[r.dni].push({ fecha: r.fecha, presente: r.presente });
+    }
+
+    let totalRegistros = 0;
+    let totalPresentes = 0;
+    let faltasCriticas = 0;
+    const todayRecords = (monthRecords || []).filter(r => r.fecha === today);
+    const presentesHoy = todayRecords.filter(r => r.presente).length;
+    const ausentesHoy = todayRecords.filter(r => !r.presente).length;
+
+    const rows: AttendanceDetailRow[] = activePeople.map(person => {
+      const records = byPerson[person.dni] || [];
+      const faltasMes = records.filter(r => !r.presente).length;
+      totalRegistros += records.length;
+      totalPresentes += records.filter(r => r.presente).length;
+      const sorted = [...records].sort((a, b) => b.fecha.localeCompare(a.fecha));
+      let consecutivas = 0;
+      for (const r of sorted) {
+        if (!r.presente) consecutivas++;
+        else break;
+      }
+      if (consecutivas >= 2) faltasCriticas++;
+      return { dni: person.dni, nombre: person.nombre, apellido: person.apellido, faltasMes, consecutivasActuales: consecutivas };
+    });
+
+    const porcentajeMes = totalRegistros > 0 ? Math.round((totalPresentes / totalRegistros) * 100) : 0;
+    setAttendanceStats({ presentesHoy, ausentesHoy, porcentajeMes, faltasCriticas });
+    setAttendanceDetailRows(rows);
+    setLoadingAttendance(false);
+  };
+
+  // Attendance: save records for selected date
+  const handleSaveAttendance = async () => {
+    if (!dispositivoId || savingAttendance || activePeople.length === 0) return;
+    setSavingAttendance(true);
+    setErrorMsg(null);
+    const records = activePeople.map(p => ({
+      dni: p.dni,
+      dispositivo_id: dispositivoId,
+      fecha: selectedDate,
+      presente: todayAttendanceMap[p.dni] ?? true,
+      registrado_por: user?.id
+    }));
+    const { error } = await supabase
+      .from('registro_asistencia')
+      .upsert(records, { onConflict: 'dni,dispositivo_id,fecha' });
+    if (error) {
+      setErrorMsg('Error al guardar asistencia: ' + error.message);
+    } else {
+      setSuccessMsg('Asistencia del día guardada correctamente.');
+      setAttendanceAlreadySaved(true);
+      loadAttendanceStats();
+    }
+    setSavingAttendance(false);
   };
 
   // Submit form (create or update)
@@ -488,6 +654,11 @@ export const OperatorDashboard: React.FC = () => {
             });
 
           if (fnError) throw fnError;
+
+          // 4. Insert tutor if provided
+          if (formTutorNombre && formTutorTelefono) {
+            await supabase.from('tutor').insert({ nombre: formTutorNombre, telefono: formTutorTelefono, dni_nino: formDni });
+          }
         } else {
           const obsJson: FichaDiaObservaciones = {
             condicion_actual: formDiaCondicionActual || undefined,
@@ -594,6 +765,15 @@ export const OperatorDashboard: React.FC = () => {
           await logTracking(vId, 'ficha.violencia_detalle', (selectedPerson as any).violencia_detalle, obsJson.violencia_detalle);
           await logTracking(vId, 'ficha.observaciones_libres', (selectedPerson as any).texto_libre, obsJson.texto_libre);
 
+          // Save tutor
+          if (formTutorNombre && formTutorTelefono) {
+            if (existingTutorId) {
+              await supabase.from('tutor').update({ nombre: formTutorNombre, telefono: formTutorTelefono }).eq('id', existingTutorId);
+            } else {
+              await supabase.from('tutor').insert({ nombre: formTutorNombre, telefono: formTutorTelefono, dni_nino: formDni });
+            }
+          }
+
         } else {
           const obsJson: FichaDiaObservaciones = {
             condicion_actual: formDiaCondicionActual || undefined,
@@ -654,41 +834,75 @@ export const OperatorDashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Center Banner Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="relative bg-gradient-to-r from-emerald-900/40 via-slate-900 to-slate-900 border border-slate-800/60 rounded-3xl p-8 shadow-xl overflow-hidden">
+        {/* Decorative background shapes */}
+        <div className="absolute -top-24 -left-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-slate-900/50 to-transparent pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <span>{dispositivoNombre}</span>
-              <span className={`text-xs px-2.5 py-1 rounded-full uppercase font-bold tracking-wide ${
+            <div className="flex items-center gap-3 mb-2">
+              <span className={`text-[10px] px-2.5 py-1 rounded-lg uppercase font-black tracking-widest ${
                 dispositivoTipo === 'ninez'
                   ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                   : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'
               }`}>
                 {dispositivoTipo === 'ninez' ? 'Centro de Niñez' : 'Centro de Día'}
               </span>
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tight">
+              {dispositivoNombre}
             </h1>
-            <p className="text-slate-400 text-sm mt-1">
-              Panel Operativo Móvil • Registra y actualiza beneficiarios en tiempo real.
+            <p className="text-slate-400 text-sm mt-1.5 font-medium">
+              Panel Operativo • Búsqueda, registro y actualización de fichas.
             </p>
           </div>
-          {viewMode === 'list' && (
-            <button
-              onClick={() => {
-                setErrorMsg(null);
-                setSuccessMsg(null);
-                setDniSearched(false);
-                setSearchDni('');
-                setFoundPersona(null);
-                // Open mock search modal trigger or focus search DNI
-                const el = document.getElementById('dni-search-input');
-                if (el) el.focus();
-              }}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-600 hover:to-teal-500 text-slate-950 font-bold text-sm rounded-xl transition duration-150 flex items-center justify-center gap-2"
-            >
-              <UserPlus className="w-4.5 h-4.5" />
-              Nuevo Beneficiario
-            </button>
-          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Tab navigation */}
+            {(viewMode === 'list' || viewMode === 'asistencia') && (
+              <div className="flex gap-1 bg-slate-950/60 border border-slate-700/40 rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-emerald-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  Beneficiarios
+                </button>
+                <button
+                  onClick={() => { setViewMode('asistencia'); setAttendanceSubTab('marcar'); }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                    viewMode === 'asistencia'
+                      ? 'bg-sky-500 text-slate-950 shadow'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  Asistencia
+                </button>
+              </div>
+            )}
+            {viewMode === 'list' && (
+              <button
+                onClick={() => {
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                  setDniSearched(false);
+                  setSearchDni('');
+                  setFoundPersona(null);
+                  const el = document.getElementById('dni-search-input');
+                  if (el) el.focus();
+                }}
+                className="group px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm rounded-2xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+              >
+                <UserPlus className="w-5 h-5 transition-transform group-hover:scale-110" />
+                Nuevo Beneficiario
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -711,23 +925,21 @@ export const OperatorDashboard: React.FC = () => {
       {viewMode === 'list' && (
         <div className="space-y-6">
           {/* Search DNI Card before registering */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-base font-bold text-white mb-3">Buscar DNI antes de registrar</h2>
-            <form onSubmit={handleSearchDni} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  id="dni-search-input"
-                  type="number"
-                  placeholder="Ingrese DNI del beneficiario..."
-                  value={searchDni}
-                  onChange={(e) => setSearchDni(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white rounded-xl text-base"
-                />
-              </div>
+          <div className="bg-slate-900/80 border border-slate-800/60 rounded-3xl p-6 shadow-xl card-hover">
+            <h2 className="text-sm font-black text-white mb-4 uppercase tracking-wider">Buscar por DNI</h2>
+            <form onSubmit={handleSearchDni} className="relative flex items-center">
+              <Search className="absolute left-4 w-5 h-5 text-emerald-500" />
+              <input
+                id="dni-search-input"
+                type="number"
+                placeholder="Ingresá el DNI para buscar o registrar..."
+                value={searchDni}
+                onChange={(e) => setSearchDni(e.target.value)}
+                className="w-full pl-12 pr-32 py-4 bg-slate-950/80 border border-slate-700/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-white rounded-2xl text-base transition-all placeholder-slate-600 shadow-inner"
+              />
               <button
                 type="submit"
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold rounded-xl transition duration-150 text-sm"
+                className="absolute right-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-colors text-sm"
               >
                 Buscar
               </button>
@@ -816,39 +1028,60 @@ export const OperatorDashboard: React.FC = () => {
                 No hay beneficiarios activos registrados en este centro.
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {activePeople.map((person) => (
-                  <div
-                    key={person.vinculo_id}
-                    className="p-4 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-xl shadow-sm flex items-center justify-between gap-4 transition duration-150"
-                  >
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-white text-base truncate">
-                        {person.nombre} {person.apellido}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1 flex items-center gap-2">
-                        <span>DNI: {person.dni}</span>
-                        <span>•</span>
-                        <span>Barrio: {person.barrio}</span>
-                      </p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
-                          {person.estado}
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Alta: {person.fecha_alta}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleSelectToEdit(person)}
-                      className="p-2.5 bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300 rounded-xl transition duration-150"
-                      title="Editar ficha"
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {activePeople.map((person) => {
+                  const hasVulnerability = person.consumo_activo || person.violencia_familiar;
+                  const initials = `${person.nombre[0] || ''}${person.apellido[0] || ''}`.toUpperCase();
+                  const colors = ['from-emerald-500 to-teal-400','from-violet-500 to-purple-400','from-amber-500 to-orange-400','from-sky-500 to-blue-400','from-rose-500 to-pink-400'];
+                  const grad = colors[(person.dni.charCodeAt(0) || 0) % colors.length];
+
+                  return (
+                    <div
+                      key={person.vinculo_id}
+                      className="group p-5 bg-slate-900/80 hover:bg-slate-800/80 border border-slate-800/60 hover:border-emerald-500/30 rounded-3xl shadow-lg flex items-center justify-between gap-4 transition-all duration-200 cursor-default"
                     >
-                      <Edit3 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-4 min-w-0">
+                        {/* Avatar */}
+                        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${grad} flex items-center justify-center text-sm font-black text-slate-950 shrink-0 shadow-inner`}>
+                          {initials}
+                        </div>
+                        
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-white text-base truncate flex items-center gap-2">
+                            {person.nombre} {person.apellido}
+                            {hasVulnerability && (
+                              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" title="Indicadores de vulnerabilidad presentes" />
+                            )}
+                          </h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5 font-medium flex items-center gap-1.5">
+                            <span className="font-mono text-slate-300">{person.dni}</span>
+                            <span>•</span>
+                            <span className="truncate">{person.barrio}</span>
+                          </p>
+                          <div className="mt-2.5 flex items-center gap-2">
+                            <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase ${
+                              person.estado === 'activo'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                                : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                            }`}>
+                              {person.estado}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              Alta: {person.fecha_alta}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleSelectToEdit(person)}
+                        className="p-3 bg-slate-800/60 hover:bg-emerald-500 hover:text-slate-950 text-slate-400 rounded-2xl transition-all duration-200 opacity-0 group-hover:opacity-100 shrink-0"
+                        title="Ver / Editar Ficha"
+                      >
+                        <Edit3 className="w-4.5 h-4.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1313,6 +1546,40 @@ export const OperatorDashboard: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Section 6: Referente / Tutor (ninez only) */}
+            {dispositivoTipo === 'ninez' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-sky-400 uppercase tracking-wider border-b border-slate-800 pb-2">
+                  6. Referente / Tutor
+                </h3>
+                <p className="text-xs text-slate-500">Datos de contacto del responsable del niño/a. Se utilizarán para enviar avisos automáticos ante inasistencias reiteradas.</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Nombre del Tutor/Referente</label>
+                    <input
+                      type="text"
+                      value={formTutorNombre}
+                      onChange={(e) => setFormTutorNombre(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-base"
+                      placeholder="Ej. María González"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5" /> WhatsApp (con código de país)
+                    </label>
+                    <input
+                      type="tel"
+                      value={formTutorTelefono}
+                      onChange={(e) => setFormTutorTelefono(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-base"
+                      placeholder="+5491112345678"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Form Footer */}
@@ -1336,6 +1603,269 @@ export const OperatorDashboard: React.FC = () => {
             </button>
           </div>
         </form>
+      )}
+
+      {/* ASISTENCIA VIEW */}
+      {viewMode === 'asistencia' && (
+        <div className="space-y-5">
+          {/* Sub-tab switcher */}
+          <div className="flex gap-1 bg-slate-900/80 border border-slate-800/60 rounded-2xl p-1.5 w-fit">
+            <button
+              onClick={() => setAttendanceSubTab('marcar')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                attendanceSubTab === 'marcar'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              Marcar hoy
+            </button>
+            <button
+              onClick={() => { setAttendanceSubTab('seguimiento'); loadAttendanceStats(); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                attendanceSubTab === 'seguimiento'
+                  ? 'bg-sky-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              Seguimiento
+            </button>
+          </div>
+
+          {/* MARCAR HOY */}
+          {attendanceSubTab === 'marcar' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-white">Asistencia del día</h2>
+                  {attendanceAlreadySaved && <span className="text-xs text-emerald-400 font-semibold">• Ya guardada</span>}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Date navigator */}
+                  <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1">
+                    <button
+                      type="button"
+                      onClick={() => shiftDate(-1)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                      title="Día anterior"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => e.target.value && handleDateChange(e.target.value)}
+                      className="bg-transparent text-white text-sm font-semibold px-1 focus:outline-none cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => shiftDate(1)}
+                      disabled={selectedDate >= new Date().toISOString().split('T')[0]}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Día siguiente"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSaveAttendance}
+                    disabled={savingAttendance || activePeople.length === 0}
+                    className="px-5 py-2.5 bg-gradient-to-r from-sky-500 to-blue-400 hover:from-sky-400 hover:to-blue-300 text-slate-950 font-bold text-sm rounded-xl flex items-center gap-2 disabled:opacity-50 transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingAttendance ? 'Guardando...' : attendanceAlreadySaved ? 'Actualizar' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+
+              {activePeople.length === 0 ? (
+                <div className="p-8 bg-slate-900 border border-slate-800 rounded-2xl text-center text-slate-500 text-sm">
+                  No hay beneficiarios activos en este centro.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {activePeople.map((person) => {
+                    const isPresente = todayAttendanceMap[person.dni] ?? true;
+                    const initials = `${person.nombre[0] || ''}${person.apellido[0] || ''}`.toUpperCase();
+                    return (
+                      <div
+                        key={person.dni}
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                          isPresente
+                            ? 'bg-emerald-500/5 border-emerald-500/20'
+                            : 'bg-red-500/5 border-red-500/20'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-slate-950 ${isPresente ? 'bg-emerald-400' : 'bg-red-400'}`}>
+                            {initials}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">{person.nombre} {person.apellido}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">{person.dni}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setTodayAttendanceMap(prev => ({ ...prev, [person.dni]: !(prev[person.dni] ?? true) }))}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            isPresente
+                              ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                              : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          }`}
+                        >
+                          {isPresente ? (
+                            <><ToggleRight className="w-4 h-4" /> Presente</>
+                          ) : (
+                            <><ToggleLeft className="w-4 h-4" /> Ausente</>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SEGUIMIENTO */}
+          {attendanceSubTab === 'seguimiento' && (
+            <div className="space-y-5">
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="bg-slate-900/80 border border-emerald-500/20 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-slate-400 uppercase">Presentes hoy</span>
+                  </div>
+                  <p className="text-3xl font-black text-emerald-400">{attendanceStats?.presentesHoy ?? '—'}</p>
+                </div>
+                <div className="bg-slate-900/80 border border-red-500/20 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingDown className="w-4 h-4 text-red-400" />
+                    <span className="text-xs font-bold text-slate-400 uppercase">Ausentes hoy</span>
+                  </div>
+                  <p className="text-3xl font-black text-red-400">{attendanceStats?.ausentesHoy ?? '—'}</p>
+                </div>
+                <div className="bg-slate-900/80 border border-sky-500/20 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <ClipboardList className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs font-bold text-slate-400 uppercase">Asistencia mes</span>
+                  </div>
+                  <p className="text-3xl font-black text-sky-400">{attendanceStats ? `${attendanceStats.porcentajeMes}%` : '—'}</p>
+                </div>
+                <div className="bg-slate-900/80 border border-orange-500/30 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Bell className="w-4 h-4 text-orange-400" />
+                    <span className="text-xs font-bold text-slate-400 uppercase">Faltas críticas</span>
+                  </div>
+                  <p className="text-3xl font-black text-orange-400">{attendanceStats?.faltasCriticas ?? '—'}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">2+ días seguidos</p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-48">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre o DNI..."
+                    value={attendanceFilter}
+                    onChange={(e) => setAttendanceFilter(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+                  />
+                </div>
+                <input
+                  type="number"
+                  placeholder="Faltas mes ≥"
+                  value={attendanceMinFaltas}
+                  onChange={(e) => setAttendanceMinFaltas(e.target.value)}
+                  className="w-36 px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+                  min={0}
+                />
+                <input
+                  type="number"
+                  placeholder="Consecutivas ≥"
+                  value={attendanceMinConsecutive}
+                  onChange={(e) => setAttendanceMinConsecutive(e.target.value)}
+                  className="w-36 px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+                  min={0}
+                />
+              </div>
+
+              {/* Table */}
+              {loadingAttendance ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(n => <div key={n} className="h-14 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />)}
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-950 text-slate-400 text-xs uppercase">
+                        <th className="text-left px-4 py-3 font-bold">Nombre</th>
+                        <th className="text-left px-4 py-3 font-bold">DNI</th>
+                        <th className="text-center px-4 py-3 font-bold">Faltas mes</th>
+                        <th className="text-center px-4 py-3 font-bold">Consecutivas</th>
+                        <th className="text-center px-4 py-3 font-bold">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {attendanceDetailRows
+                        .filter(row => {
+                          const q = attendanceFilter.toLowerCase();
+                          const matchQ = !q || `${row.nombre} ${row.apellido}`.toLowerCase().includes(q) || row.dni.includes(q);
+                          const matchFaltas = !attendanceMinFaltas || row.faltasMes >= parseInt(attendanceMinFaltas);
+                          const matchConsec = !attendanceMinConsecutive || row.consecutivasActuales >= parseInt(attendanceMinConsecutive);
+                          return matchQ && matchFaltas && matchConsec;
+                        })
+                        .map(row => {
+                          const isCritical = row.consecutivasActuales >= 2;
+                          return (
+                            <tr key={row.dni} className={`transition-colors ${isCritical ? 'bg-orange-500/5 hover:bg-orange-500/10' : 'bg-slate-900/60 hover:bg-slate-800/60'}`}>
+                              <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
+                                {isCritical && <span className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.7)]" />}
+                                {row.nombre} {row.apellido}
+                              </td>
+                              <td className="px-4 py-3 text-slate-400 font-mono">{row.dni}</td>
+                              <td className="px-4 py-3 text-center font-bold text-slate-300">{row.faltasMes}</td>
+                              <td className={`px-4 py-3 text-center font-black ${isCritical ? 'text-orange-400' : 'text-slate-300'}`}>
+                                {row.consecutivasActuales}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                {isCritical ? (
+                                  <span className="text-[10px] px-2 py-1 bg-orange-500/15 text-orange-400 border border-orange-500/20 rounded-lg font-bold uppercase">Crítico</span>
+                                ) : row.consecutivasActuales === 1 ? (
+                                  <span className="text-[10px] px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/15 rounded-lg font-bold uppercase">Atención</span>
+                                ) : (
+                                  <span className="text-[10px] px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 rounded-lg font-bold uppercase">Regular</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                  {attendanceDetailRows.filter(row => {
+                    const q = attendanceFilter.toLowerCase();
+                    const matchQ = !q || `${row.nombre} ${row.apellido}`.toLowerCase().includes(q) || row.dni.includes(q);
+                    const matchFaltas = !attendanceMinFaltas || row.faltasMes >= parseInt(attendanceMinFaltas);
+                    const matchConsec = !attendanceMinConsecutive || row.consecutivasActuales >= parseInt(attendanceMinConsecutive);
+                    return matchQ && matchFaltas && matchConsec;
+                  }).length === 0 && (
+                    <div className="p-8 text-center text-slate-500 text-sm">
+                      No hay registros que coincidan con los filtros.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

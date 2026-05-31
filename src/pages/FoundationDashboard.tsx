@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../supabaseClient';
 import type { Dispositivo, FichaNinez, FichaDia, HistorialSeguimiento, EstadoVinculo } from '../types';
 import { BarChart, ProgressCircle, AgeSexDistribution } from '../components/CustomCharts';
-import { Filter, FileDown, Eye, X, User, ShieldAlert, RefreshCw, Clock } from 'lucide-react';
+import { Filter, FileDown, Eye, X, User, ShieldAlert, RefreshCw, Clock, CalendarDays, ClipboardList, TrendingDown, Bell, Users, Search } from 'lucide-react';
 
 interface UnifiedRecord {
   dni: string;
@@ -24,10 +25,30 @@ interface UnifiedRecord {
   ficha_dia?: FichaDia;
 }
 
+interface FdAttendanceRow {
+  dni: string;
+  nombre: string;
+  apellido: string;
+  dispositivo_id: number;
+  dispositivo_nombre: string;
+  faltasMes: number;
+  consecutivasActuales: number;
+}
+
+interface FdCenterStat {
+  presentesHoy: number;
+  ausentesHoy: number;
+  totalActivos: number;
+  faltasCriticas: number;
+}
+
 export const FoundationDashboard: React.FC = () => {
   const [records, setRecords] = useState<UnifiedRecord[]>([]);
   const [devices, setDevices] = useState<Dispositivo[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Main view tabs
+  const [fdViewMode, setFdViewMode] = useState<'dashboard' | 'asistencia'>('dashboard');
 
   // Filters
   const [selectedDevice, setSelectedDevice] = useState<string>('');
@@ -50,6 +71,16 @@ export const FoundationDashboard: React.FC = () => {
     pctConsumo: 0,
     pctViolencia: 0,
   });
+
+  // Attendance states
+  const [fdAttendanceRows, setFdAttendanceRows] = useState<FdAttendanceRow[]>([]);
+  const [fdCenterStats, setFdCenterStats] = useState<Record<number, FdCenterStat>>({});
+  const [fdAttendanceGlobal, setFdAttendanceGlobal] = useState<{ presentesHoy: number; ausentesHoy: number; porcentajeMes: number; faltasCriticas: number } | null>(null);
+  const [loadingFdAttendance, setLoadingFdAttendance] = useState(false);
+  const [fdAttFilter, setFdAttFilter] = useState('');
+  const [fdAttMinFaltas, setFdAttMinFaltas] = useState('');
+  const [fdAttMinConsec, setFdAttMinConsec] = useState('');
+  const [fdAttDevice, setFdAttDevice] = useState('');
 
   const calculateAge = (birthDateString: string) => {
     const birthDate = new Date(birthDateString);
@@ -215,6 +246,71 @@ export const FoundationDashboard: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const loadAttendanceFoundation = async () => {
+    if (records.length === 0) return;
+    setLoadingFdAttendance(true);
+    const today = new Date().toISOString().split('T')[0];
+    const monthStart = today.substring(0, 7) + '-01';
+
+    const { data: monthAttendance } = await supabase
+      .from('registro_asistencia')
+      .select('dni, dispositivo_id, fecha, presente')
+      .gte('fecha', monthStart)
+      .lte('fecha', today)
+      .order('fecha', { ascending: false });
+
+    const byPersonDevice: Record<string, { fecha: string; presente: boolean }[]> = {};
+    for (const r of (monthAttendance || [])) {
+      const key = `${r.dni}:${r.dispositivo_id}`;
+      if (!byPersonDevice[key]) byPersonDevice[key] = [];
+      byPersonDevice[key].push({ fecha: r.fecha, presente: r.presente });
+    }
+
+    const activeRecords = records.filter(r => r.estado === 'activo');
+    const centerStatsMap: Record<number, FdCenterStat> = {};
+    devices.forEach(d => { centerStatsMap[d.id] = { presentesHoy: 0, ausentesHoy: 0, totalActivos: 0, faltasCriticas: 0 }; });
+
+    let globalTotalReg = 0, globalTotalPres = 0, globalCriticas = 0;
+    const todayRecords = (monthAttendance || []).filter(r => r.fecha === today);
+    const globalPresentesHoy = todayRecords.filter(r => r.presente).length;
+    const globalAusentesHoy = todayRecords.filter(r => !r.presente).length;
+
+    const rows: FdAttendanceRow[] = activeRecords.map(person => {
+      const key = `${person.dni}:${person.dispositivo_id}`;
+      const personRecords = byPersonDevice[key] || [];
+      const faltasMes = personRecords.filter(r => !r.presente).length;
+      const sorted = [...personRecords].sort((a, b) => b.fecha.localeCompare(a.fecha));
+      let consecutivas = 0;
+      for (const r of sorted) { if (!r.presente) consecutivas++; else break; }
+
+      globalTotalReg += personRecords.length;
+      globalTotalPres += personRecords.filter(r => r.presente).length;
+      if (centerStatsMap[person.dispositivo_id]) {
+        centerStatsMap[person.dispositivo_id].totalActivos++;
+        const todayRec = personRecords.find(r => r.fecha === today);
+        if (todayRec) {
+          if (todayRec.presente) centerStatsMap[person.dispositivo_id].presentesHoy++;
+          else centerStatsMap[person.dispositivo_id].ausentesHoy++;
+        }
+        if (consecutivas >= 2) { centerStatsMap[person.dispositivo_id].faltasCriticas++; globalCriticas++; }
+      }
+
+      return { dni: person.dni, nombre: person.nombre, apellido: person.apellido, dispositivo_id: person.dispositivo_id, dispositivo_nombre: person.dispositivo_nombre, faltasMes, consecutivasActuales: consecutivas };
+    });
+
+    const porcentajeMes = globalTotalReg > 0 ? Math.round((globalTotalPres / globalTotalReg) * 100) : 0;
+    setFdAttendanceGlobal({ presentesHoy: globalPresentesHoy, ausentesHoy: globalAusentesHoy, porcentajeMes, faltasCriticas: globalCriticas });
+    setFdCenterStats(centerStatsMap);
+    setFdAttendanceRows(rows);
+    setLoadingFdAttendance(false);
+  };
+
+  useEffect(() => {
+    if (fdViewMode === 'asistencia' && records.length > 0) {
+      loadAttendanceFoundation();
+    }
+  }, [fdViewMode, records.length]);
 
   // Filter records
   const filteredRecords = records.filter((r) => {
@@ -436,38 +532,62 @@ export const FoundationDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Dashboard Title & Quick Refresh */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 animate-fadeIn">
+      {/* Dashboard Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">Dashboard Central</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Fundación de Salud Comunitaria • Indicadores de Impacto y Gestión de Dispositivos.
-          </p>
+          <p className="text-xs text-emerald-400 font-bold uppercase tracking-widest mb-1">Vista General</p>
+          <h1 className="text-3xl font-black text-white tracking-tight">Dashboard Central</h1>
+          <p className="text-slate-500 text-sm mt-1">Indicadores de impacto y gestión de dispositivos comunitarios.</p>
         </div>
-        <button
-          onClick={loadData}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-900 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-sm font-semibold transition"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Recargar
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Tab navigation */}
+          <div className="flex gap-1 bg-slate-900/80 border border-slate-800/60 rounded-xl p-1">
+            <button
+              onClick={() => setFdViewMode('dashboard')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                fdViewMode === 'dashboard' ? 'bg-emerald-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              Dashboard
+            </button>
+            <button
+              onClick={() => setFdViewMode('asistencia')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                fdViewMode === 'asistencia' ? 'bg-sky-500 text-slate-950 shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              Asistencia
+            </button>
+          </div>
+          <button
+            onClick={loadData}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/80 border border-slate-800/60 text-slate-400 hover:text-white rounded-2xl text-sm font-bold transition-all hover:bg-slate-800"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Recargar
+          </button>
+        </div>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map((n) => (
-            <div key={n} className="h-28 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse"></div>
+      {fdViewMode === 'dashboard' && loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {[1,2,3,4,5].map((n) => (
+            <div key={n} className="h-24 bg-slate-900/60 border border-slate-800/60 rounded-2xl animate-pulse" />
           ))}
         </div>
-      ) : (
+      ) : fdViewMode === 'dashboard' ? (
         <>
-          {/* Key KPI Cards Row */}
+          {/* KPI Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-gradient-to-br from-emerald-500/10 to-teal-400/5 border border-emerald-500/20 rounded-2xl p-5 shadow-sm">
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Activos Totales</span>
-              <div className="text-4xl font-black text-white mt-2">{kpis.totalActive}</div>
-              <p className="text-xs text-slate-500 mt-1">En todos los centros</p>
+            {/* Total activos — big hero card */}
+            <div className="bg-gradient-to-br from-emerald-500/15 to-teal-400/5 border border-emerald-500/25 rounded-2xl p-5 flex flex-col justify-between card-hover relative overflow-hidden">
+              <div className="absolute -right-4 -top-4 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl" />
+              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Activos Totales</p>
+              <div className="text-5xl font-black text-white mt-1 leading-none">{kpis.totalActive}</div>
+              <p className="text-xs text-slate-500 mt-2">personas en todos los centros</p>
             </div>
             <ProgressCircle percentage={kpis.pctSchooled} label="% Escolarizados" />
             <ProgressCircle percentage={kpis.pctCud} label="% con CUD (Día)" colorClass="indigo" />
@@ -475,49 +595,54 @@ export const FoundationDashboard: React.FC = () => {
             <ProgressCircle percentage={kpis.pctViolencia} label="% Violencia Familiar" colorClass="amber" />
           </div>
 
-          {/* Visual Analytics Grid */}
+          {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart 1: Active per Center */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-bold text-white mb-4">Personas Activas por Dispositivo</h3>
+            <div className="bg-slate-900/80 border border-slate-800/60 rounded-3xl p-6 shadow-xl card-hover">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-black text-white">Personas Activas por Centro</h3>
+                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Activos</span>
+              </div>
               <BarChart data={deviceStats} />
             </div>
-
-            {/* Chart 2: Age / Sex distribution */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-base font-bold text-white mb-4">Distribución por Sexo y Rango Etario</h3>
+            <div className="bg-slate-900/80 border border-slate-800/60 rounded-3xl p-6 shadow-xl card-hover">
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-black text-white">Distribución por Sexo y Edad</h3>
+                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Activos</span>
+              </div>
               <AgeSexDistribution data={ageSexStats} />
             </div>
           </div>
 
-          {/* Centralized Table & Filtering */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-            {/* Filter Bar Header */}
-            <div className="p-5 border-b border-slate-800 bg-slate-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Filter className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-white text-base">Registros Centralizados</h3>
+          {/* Table */}
+          <div className="bg-slate-900/80 border border-slate-800/60 rounded-3xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <Filter className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-sm">Registros Centralizados</h3>
+                  <p className="text-[10px] text-slate-500">{filteredRecords.length} de {records.length} registros</p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleExportCSV}
-                  disabled={filteredRecords.length === 0}
-                  className="px-4 py-2.5 bg-slate-850 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  <FileDown className="w-4 h-4" />
-                  Exportar CSV
-                </button>
-              </div>
+              <button
+                onClick={handleExportCSV}
+                disabled={filteredRecords.length === 0}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:text-white hover:bg-slate-800 rounded-2xl text-xs font-bold transition disabled:opacity-40"
+              >
+                <FileDown className="w-4 h-4" />
+                Exportar CSV
+              </button>
             </div>
 
-            {/* Interactive Filters Grid */}
-            <div className="p-4 bg-slate-900/25 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Filters */}
+            <div className="px-6 py-4 border-b border-slate-800/60 bg-slate-950/30 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Centro</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Centro</label>
                 <select
                   value={selectedDevice}
                   onChange={(e) => setSelectedDevice(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-700/60 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 >
                   <option value="">Todos los centros</option>
                   {devices.map((d) => (
@@ -527,24 +652,22 @@ export const FoundationDashboard: React.FC = () => {
                   ))}
                 </select>
               </div>
-
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Barrio</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Barrio</label>
                 <input
                   type="text"
-                  placeholder="Filtrar por barrio..."
+                  placeholder="Escribí un barrio..."
                   value={selectedBarrio}
                   onChange={(e) => setSelectedBarrio(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-700/60 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition placeholder-slate-600"
                 />
               </div>
-
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Estado</label>
                 <select
                   value={selectedEstado}
                   onChange={(e) => setSelectedEstado(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-700/60 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 >
                   <option value="">Todos los estados</option>
                   <option value="activo">Activo</option>
@@ -552,76 +675,70 @@ export const FoundationDashboard: React.FC = () => {
                   <option value="inasistencia_prolongada">Inasistencia Prolongada</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Fecha de Alta</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Fecha de Alta</label>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-700/60 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 />
               </div>
             </div>
 
-            {/* Table Area */}
+            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-950/60 uppercase font-bold text-slate-500 border-b border-slate-850">
+                <thead className="bg-slate-950/60 border-b border-slate-800/60">
                   <tr>
-                    <th className="p-4">DNI</th>
-                    <th className="p-4">Nombre Completo</th>
-                    <th className="p-4">Dispositivo</th>
-                    <th className="p-4">Barrio</th>
-                    <th className="p-4">Fecha Alta</th>
-                    <th className="p-4 text-center">Estado</th>
-                    <th className="p-4 text-right">Ficha</th>
+                    {['DNI','Nombre Completo','Centro','Barrio','Alta','Estado',''].map((h, i) => (
+                      <th key={i} className={`px-5 py-3.5 text-[10px] font-black text-slate-500 uppercase tracking-wider ${i === 6 ? 'text-right' : ''}`}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-850">
+                <tbody className="divide-y divide-slate-800/40">
                   {filteredRecords.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500 font-medium">
-                        No se encontraron registros coincidentes con los filtros aplicados.
+                      <td colSpan={7} className="px-5 py-12 text-center text-slate-500 text-sm">
+                        No se encontraron registros con los filtros aplicados.
                       </td>
                     </tr>
                   ) : (
                     filteredRecords.map((r) => (
-                      <tr key={r.vinculo_id} className="hover:bg-slate-850/40 transition">
-                        <td className="p-4 font-mono font-semibold text-slate-300">{r.dni}</td>
-                        <td className="p-4 font-bold text-white">
-                          {r.apellido}, {r.nombre}
-                        </td>
-                        <td className="p-4 text-slate-300">
-                          {r.dispositivo_nombre}
-                          <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                            r.dispositivo_tipo === 'ninez'
-                              ? 'bg-amber-500/10 text-amber-500'
-                              : 'bg-indigo-500/10 text-indigo-400'
+                      <tr key={r.vinculo_id} className="hover:bg-slate-800/30 transition-colors group">
+                        <td className="px-5 py-3.5 font-mono text-xs font-semibold text-slate-400">{r.dni}</td>
+                        <td className="px-5 py-3.5 font-bold text-white">{r.apellido}, {r.nombre}</td>
+                        <td className="px-5 py-3.5">
+                          <span className="text-slate-300 text-xs">{r.dispositivo_nombre.replace('Centro de ','').replace('Centro de Día ','')}</span>
+                          <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase ${
+                            r.dispositivo_tipo === 'ninez' ? 'bg-amber-500/10 text-amber-400' : 'bg-indigo-500/10 text-indigo-400'
                           }`}>
                             {r.dispositivo_tipo === 'ninez' ? 'Niñez' : 'Día'}
                           </span>
                         </td>
-                        <td className="p-4 text-slate-400">{r.barrio}</td>
-                        <td className="p-4 text-slate-400">{r.fecha_alta}</td>
-                        <td className="p-4 text-center">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold uppercase text-[9px] ${
+                        <td className="px-5 py-3.5 text-slate-400 text-xs">{r.barrio}</td>
+                        <td className="px-5 py-3.5 text-slate-500 text-xs">{r.fecha_alta}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${
                             r.estado === 'activo'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
                               : r.estado === 'egresado'
-                              ? 'bg-slate-800 text-slate-400 border border-slate-700'
-                              : 'bg-amber-500/10 text-amber-500 border border-amber-500/10'
+                              ? 'bg-slate-800/60 text-slate-400 border border-slate-700/60'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
                           }`}>
+                            <span className={`w-1 h-1 rounded-full ${
+                              r.estado === 'activo' ? 'bg-emerald-400' : r.estado === 'egresado' ? 'bg-slate-500' : 'bg-amber-400'
+                            }`} />
                             {r.estado}
                           </span>
                         </td>
-                        <td className="p-4 text-right">
+                        <td className="px-5 py-3.5 text-right">
                           <button
                             onClick={() => handleOpenDetail(r)}
-                            className="p-1.5 bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300 rounded-lg transition"
-                            title="Ver ficha completa"
+                            className="p-2 bg-slate-800/60 hover:bg-emerald-500 hover:text-slate-950 text-slate-400 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            title="Ver ficha"
                           >
-                            <Eye className="w-4.5 h-4.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
                         </td>
                       </tr>
@@ -630,38 +747,217 @@ export const FoundationDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
-
-            {/* Summary Count Footer */}
-            <div className="p-4 bg-slate-950/20 border-t border-slate-800 text-xs text-slate-500 text-right">
-              Mostrando {filteredRecords.length} de {records.length} registros totales.
+            <div className="px-6 py-3 border-t border-slate-800/60 text-[10px] text-slate-600 font-semibold text-right">
+              {filteredRecords.length} de {records.length} registros
             </div>
           </div>
         </>
+      ) : null}
+
+      {/* ASISTENCIA VIEW */}
+      {fdViewMode === 'asistencia' && (
+        <div className="space-y-6">
+          {/* Global KPIs */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="bg-slate-900/80 border border-emerald-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-bold text-slate-400 uppercase">Presentes hoy</span>
+              </div>
+              <p className="text-3xl font-black text-emerald-400">{fdAttendanceGlobal?.presentesHoy ?? '—'}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">todos los centros</p>
+            </div>
+            <div className="bg-slate-900/80 border border-red-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingDown className="w-4 h-4 text-red-400" />
+                <span className="text-xs font-bold text-slate-400 uppercase">Ausentes hoy</span>
+              </div>
+              <p className="text-3xl font-black text-red-400">{fdAttendanceGlobal?.ausentesHoy ?? '—'}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">todos los centros</p>
+            </div>
+            <div className="bg-slate-900/80 border border-sky-500/20 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <ClipboardList className="w-4 h-4 text-sky-400" />
+                <span className="text-xs font-bold text-slate-400 uppercase">Asistencia mes</span>
+              </div>
+              <p className="text-3xl font-black text-sky-400">{fdAttendanceGlobal ? `${fdAttendanceGlobal.porcentajeMes}%` : '—'}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">promedio global</p>
+            </div>
+            <div className="bg-slate-900/80 border border-orange-500/30 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Bell className="w-4 h-4 text-orange-400" />
+                <span className="text-xs font-bold text-slate-400 uppercase">Faltas críticas</span>
+              </div>
+              <p className="text-3xl font-black text-orange-400">{fdAttendanceGlobal?.faltasCriticas ?? '—'}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">2+ días seguidos</p>
+            </div>
+          </div>
+
+          {/* Per-center breakdown */}
+          {devices.filter(d => d.tipo === 'ninez').length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-white mb-3">Faltas críticas por centro</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {devices.filter(d => d.tipo === 'ninez').map(dev => {
+                  const stat = fdCenterStats[dev.id];
+                  const criticas = stat?.faltasCriticas ?? 0;
+                  return (
+                    <div key={dev.id} className={`bg-slate-900/80 border rounded-2xl p-4 ${criticas > 0 ? 'border-orange-500/30' : 'border-slate-800/60'}`}>
+                      <p className="text-xs font-bold text-slate-400 truncate mb-1">{dev.nombre}</p>
+                      <div className="flex items-end justify-between">
+                        <div>
+                          <span className={`text-2xl font-black ${criticas > 0 ? 'text-orange-400' : 'text-slate-400'}`}>{criticas}</span>
+                          <span className="text-xs text-slate-500 ml-1">críticas</span>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500">
+                          <div>{stat?.totalActivos ?? 0} activos</div>
+                          <div>{stat?.ausentesHoy ?? 0} ausentes hoy</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-48">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Buscar por nombre o DNI..."
+                value={fdAttFilter}
+                onChange={(e) => setFdAttFilter(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+              />
+            </div>
+            <select
+              value={fdAttDevice}
+              onChange={(e) => setFdAttDevice(e.target.value)}
+              className="px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+            >
+              <option value="">Todos los centros</option>
+              {devices.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+            </select>
+            <input
+              type="number"
+              placeholder="Faltas mes ≥"
+              value={fdAttMinFaltas}
+              onChange={(e) => setFdAttMinFaltas(e.target.value)}
+              className="w-36 px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+              min={0}
+            />
+            <input
+              type="number"
+              placeholder="Consecutivas ≥"
+              value={fdAttMinConsec}
+              onChange={(e) => setFdAttMinConsec(e.target.value)}
+              className="w-36 px-3 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/40 placeholder-slate-600"
+              min={0}
+            />
+          </div>
+
+          {/* Table */}
+          {loadingFdAttendance ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map(n => <div key={n} className="h-14 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />)}
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-950 text-slate-400 text-xs uppercase">
+                    <th className="text-left px-4 py-3 font-bold">Nombre</th>
+                    <th className="text-left px-4 py-3 font-bold">DNI</th>
+                    <th className="text-left px-4 py-3 font-bold">Centro</th>
+                    <th className="text-center px-4 py-3 font-bold">Faltas mes</th>
+                    <th className="text-center px-4 py-3 font-bold">Consecutivas</th>
+                    <th className="text-center px-4 py-3 font-bold">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {fdAttendanceRows
+                    .filter(row => {
+                      const q = fdAttFilter.toLowerCase();
+                      const matchQ = !q || `${row.nombre} ${row.apellido}`.toLowerCase().includes(q) || row.dni.includes(q);
+                      const matchDev = !fdAttDevice || row.dispositivo_id === parseInt(fdAttDevice);
+                      const matchFaltas = !fdAttMinFaltas || row.faltasMes >= parseInt(fdAttMinFaltas);
+                      const matchConsec = !fdAttMinConsec || row.consecutivasActuales >= parseInt(fdAttMinConsec);
+                      return matchQ && matchDev && matchFaltas && matchConsec;
+                    })
+                    .map(row => {
+                      const isCritical = row.consecutivasActuales >= 2;
+                      return (
+                        <tr key={`${row.dni}-${row.dispositivo_id}`} className={`transition-colors ${isCritical ? 'bg-orange-500/5 hover:bg-orange-500/10' : 'bg-slate-900/60 hover:bg-slate-800/60'}`}>
+                          <td className="px-4 py-3 font-semibold text-white flex items-center gap-2">
+                            {isCritical && <span className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.7)] shrink-0" />}
+                            {row.nombre} {row.apellido}
+                          </td>
+                          <td className="px-4 py-3 text-slate-400 font-mono">{row.dni}</td>
+                          <td className="px-4 py-3 text-slate-300 text-xs max-w-xs truncate">{row.dispositivo_nombre.replace('Centro de Niñez ', '').replace('Centro de Día ', '')}</td>
+                          <td className="px-4 py-3 text-center font-bold text-slate-300">{row.faltasMes}</td>
+                          <td className={`px-4 py-3 text-center font-black ${isCritical ? 'text-orange-400' : 'text-slate-300'}`}>{row.consecutivasActuales}</td>
+                          <td className="px-4 py-3 text-center">
+                            {isCritical ? (
+                              <span className="text-[10px] px-2 py-1 bg-orange-500/15 text-orange-400 border border-orange-500/20 rounded-lg font-bold uppercase">Crítico</span>
+                            ) : row.consecutivasActuales === 1 ? (
+                              <span className="text-[10px] px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/15 rounded-lg font-bold uppercase">Atención</span>
+                            ) : (
+                              <span className="text-[10px] px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 rounded-lg font-bold uppercase">Regular</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+              {fdAttendanceRows.filter(row => {
+                const q = fdAttFilter.toLowerCase();
+                const matchQ = !q || `${row.nombre} ${row.apellido}`.toLowerCase().includes(q) || row.dni.includes(q);
+                const matchDev = !fdAttDevice || row.dispositivo_id === parseInt(fdAttDevice);
+                const matchFaltas = !fdAttMinFaltas || row.faltasMes >= parseInt(fdAttMinFaltas);
+                const matchConsec = !fdAttMinConsec || row.consecutivasActuales >= parseInt(fdAttMinConsec);
+                return matchQ && matchDev && matchFaltas && matchConsec;
+              }).length === 0 && (
+                <div className="p-8 text-center text-slate-500 text-sm">
+                  No hay registros que coincidan con los filtros.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* DETAIL MODAL PLANEL */}
-      {detailRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-4xl max-h-[85vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      {/* Detail Modal */}
+      {detailRecord && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-4xl max-h-[88vh] bg-slate-900/95 border border-slate-700/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-850">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center text-emerald-400">
-                  <User className="w-4 h-4" />
+            <div className={`p-5 border-b border-slate-800/60 flex items-center justify-between ${
+              detailRecord.dispositivo_tipo === 'ninez'
+                ? 'bg-gradient-to-r from-amber-500/8 to-transparent'
+                : 'bg-gradient-to-r from-indigo-500/8 to-transparent'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                  detailRecord.dispositivo_tipo === 'ninez'
+                    ? 'bg-amber-500/15 border border-amber-500/20 text-amber-400'
+                    : 'bg-indigo-500/15 border border-indigo-500/20 text-indigo-400'
+                }`}>
+                  <User className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-white text-base">
+                  <h3 className="font-black text-white text-base">
                     {detailRecord.nombre} {detailRecord.apellido}
                   </h3>
-                  <span className="text-xs text-slate-400">Ficha Completa de Beneficiario • DNI: {detailRecord.dni}</span>
+                  <span className="text-xs text-slate-400">DNI {detailRecord.dni} · {detailRecord.dispositivo_nombre}</span>
                 </div>
               </div>
               <button
-                onClick={() => {
-                  setDetailRecord(null);
-                  setDetailHistory([]);
-                }}
-                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition"
+                onClick={() => { setDetailRecord(null); setDetailHistory([]); }}
+                className="p-2 hover:bg-slate-800/60 text-slate-400 hover:text-white rounded-xl transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -760,19 +1056,17 @@ export const FoundationDashboard: React.FC = () => {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex justify-end">
+            <div className="p-4 border-t border-slate-800/60 bg-slate-950/40 flex justify-end">
               <button
-                onClick={() => {
-                  setDetailRecord(null);
-                  setDetailHistory([]);
-                }}
-                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold rounded-xl text-xs transition"
+                onClick={() => { setDetailRecord(null); setDetailHistory([]); }}
+                className="px-5 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white font-bold rounded-2xl text-xs transition"
               >
                 Cerrar Ficha
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
