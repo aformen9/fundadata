@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router';
-import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Users, MessageCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,6 +13,7 @@ export const Login: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [showTutorPanel, setShowTutorPanel] = useState(false);
 
   if (authLoading) {
     return (
@@ -199,10 +200,57 @@ export const Login: React.FC = () => {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
-          © 2026 FundaData · Salud Comunitaria
-        </p>
+        {/* Soy tutor button */}
+        <button
+          type="button"
+          onClick={() => setShowTutorPanel(v => !v)}
+          className="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-slate-700/50 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all text-sm font-semibold"
+        >
+          <Users className="w-4 h-4" />
+          {showTutorPanel ? 'Cerrar' : 'Soy tutor'}
+        </button>
       </div>
+
+      {/* Tutor panel */}
+      {showTutorPanel && (
+        <div className="relative z-10 w-full max-w-2xl mt-4 px-4 animate-fadeIn">
+          <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 shadow-2xl shadow-black/40">
+            <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-700/40 gap-0">
+              {/* Left: QR */}
+              <div className="flex-1 flex flex-col items-center gap-4 px-4 py-4 sm:py-2">
+                <p className="text-sm text-slate-300 text-center leading-relaxed">
+                  Si tu número <span className="text-emerald-400 font-semibold">no se encuentra registrado</span>, escanee el siguiente QR:
+                </p>
+                <img
+                  src="/qr-tutor.png"
+                  alt="QR de registro WhatsApp"
+                  className="w-44 h-44 rounded-2xl border border-slate-700/50 object-contain bg-white p-1"
+                />
+              </div>
+
+              {/* Right: Support */}
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 py-4 sm:py-2">
+                <p className="text-sm text-slate-300 text-center leading-relaxed">
+                  Si su número <span className="text-emerald-400 font-semibold">ya está registrado</span> y tiene alguna consulta:
+                </p>
+                <a
+                  href="https://wa.me/5493471570122"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 py-3 px-6 rounded-2xl font-bold text-sm text-slate-950 bg-gradient-to-r from-emerald-400 to-teal-300 hover:from-emerald-500 hover:to-teal-400 transition-all duration-200 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Contactar a soporte
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <p className="relative z-10 text-center text-xs text-slate-600 mt-6">
+        © 2026 FundaData · Salud Comunitaria
+      </p>
     </div>
   );
 };
