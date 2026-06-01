@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, createSecondaryClient } from '../supabaseClient';
 import type { Dispositivo, UserRole } from '../types';
-import { UserPlus, UserCheck, UserX, Shield, AlertCircle, CheckCircle2, Building2 } from 'lucide-react';
+import { UserPlus, UserCheck, UserX, Shield, AlertCircle, CheckCircle2, Building2, Bell, Send, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface OperatorWithDevice extends UserRole {
   email?: string;
@@ -27,6 +27,11 @@ export const AdminPanel: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [alertLoading, setAlertLoading] = useState(false);
+  const [alertResult, setAlertResult] = useState<{ ok: boolean; processed: number; results: { dni: string; enviado: boolean; error?: string }[] } | null>(null);
+  const [alertError, setAlertError] = useState<string | null>(null);
+  const [pendingOperators, setPendingOperators] = useState<OperatorWithDevice[]>([]);
+  const [pendingDevices, setPendingDevices] = useState<Record<number, string>>({});
 
   const loadData = async () => {
     setLoading(true);
@@ -43,6 +48,9 @@ export const AdminPanel: React.FC = () => {
         return { ...r, dispositivo_nombre: d ? d.nombre : 'Sin Asignar' };
       });
       setOperators(operatorsList);
+
+      const { data: pendingData } = await supabase.from('user_roles').select('*').eq('role', 'pendiente');
+      setPendingOperators((pendingData || []).map((r) => ({ ...r, dispositivo_nombre: 'Sin Asignar' })));
     } catch (e: any) {
       setErrorMsg('Error al cargar datos: ' + (e.message || ''));
     } finally {
@@ -95,6 +103,39 @@ export const AdminPanel: React.FC = () => {
       await loadData();
     } catch (err: any) {
       setErrorMsg('Error: ' + (err.message || ''));
+    }
+  };
+
+  const handleActivateOperator = async (op: OperatorWithDevice) => {
+    const devId = pendingDevices[op.id];
+    if (!devId) { setErrorMsg('Seleccioná un centro antes de activar.'); return; }
+    setErrorMsg(null); setSuccessMsg(null);
+    try {
+      const { error } = await supabase.from('user_roles').update({
+        role: 'operador',
+        dispositivo_id: parseInt(devId),
+        activo: true,
+      }).eq('id', op.id);
+      if (error) throw error;
+      setSuccessMsg(`Operador ${op.email} activado correctamente.`);
+      await loadData();
+    } catch (err: any) {
+      setErrorMsg('Error: ' + (err.message || ''));
+    }
+  };
+
+  const handleEnviarAlertas = async () => {
+    setAlertLoading(true);
+    setAlertResult(null);
+    setAlertError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('check-asistencias');
+      if (error) throw error;
+      setAlertResult(data);
+    } catch (e: any) {
+      setAlertError(e.message || 'Error al invocar la función.');
+    } finally {
+      setAlertLoading(false);
     }
   };
 
@@ -273,6 +314,118 @@ export const AdminPanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Operadores pendientes ── */}
+      {pendingOperators.length > 0 && (
+        <div className="bg-slate-900/80 border border-amber-500/20 rounded-3xl shadow-xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-800/60 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 bg-amber-500/15 border border-amber-500/20 rounded-xl flex items-center justify-center">
+                <Clock className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-black text-white text-base">Accesos Pendientes</h3>
+                <p className="text-slate-500 text-xs mt-0.5">Operadores que se registraron solos y esperan asignación.</p>
+              </div>
+            </div>
+            <span className="text-xs font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full">{pendingOperators.length} pendiente{pendingOperators.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="divide-y divide-slate-800/60">
+            {pendingOperators.map((op) => (
+              <div key={op.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${getAvatarGradient(op.email || '')} flex items-center justify-center text-[11px] font-black text-slate-950 shrink-0`}>
+                  {getInitials(op.email || '')}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{op.email || 'sin email'}</p>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/15 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Pendiente
+                  </span>
+                </div>
+                <select
+                  value={pendingDevices[op.id] || ''}
+                  onChange={(e) => setPendingDevices(prev => ({ ...prev, [op.id]: e.target.value }))}
+                  className="bg-slate-950/60 border border-slate-700/60 rounded-xl text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 py-2 px-3 sm:w-[180px]"
+                >
+                  <option value="">Seleccionar centro...</option>
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nombre}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleActivateOperator(op)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all whitespace-nowrap"
+                >
+                  <UserCheck className="w-3.5 h-3.5" /> Activar como operador
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Alertas de inasistencia ── */}
+      <div className="bg-slate-900/80 border border-slate-800/60 rounded-3xl p-6 shadow-xl space-y-5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-amber-500/15 border border-amber-500/20 rounded-xl flex items-center justify-center">
+            <Bell className="w-4 h-4 text-amber-400" />
+          </div>
+          <div>
+            <h3 className="font-black text-white text-base">Alertas de Inasistencia</h3>
+            <p className="text-slate-500 text-xs mt-0.5">Dispará manualmente el chequeo de 2 días consecutivos de ausencia y el envío de WhatsApp a los tutores.</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleEnviarAlertas}
+          disabled={alertLoading}
+          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-400 hover:from-amber-600 hover:to-orange-500 text-slate-950 font-black text-sm rounded-2xl transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {alertLoading
+            ? <><span className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" /> Procesando...</>
+            : <><Send className="w-4 h-4" /> Enviar alertas ahora</>
+          }
+        </button>
+
+        {alertError && (
+          <div className="animate-slideDown flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/25 rounded-2xl">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-300 font-medium">{alertError}</p>
+          </div>
+        )}
+
+        {alertResult && (
+          <div className="animate-slideDown space-y-3">
+            <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <p className="text-sm text-emerald-300 font-medium">
+                {alertResult.processed === 0
+                  ? 'No hay inasistencias consecutivas para notificar hoy.'
+                  : `Se procesaron ${alertResult.processed} notificación${alertResult.processed !== 1 ? 'es' : ''}.`
+                }
+              </p>
+            </div>
+
+            {alertResult.results.length > 0 && (
+              <div className="divide-y divide-slate-800/60 border border-slate-800/60 rounded-2xl overflow-hidden">
+                {alertResult.results.map((r, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    {r.enviado
+                      ? <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      : <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    }
+                    <span className="text-sm text-slate-300 font-mono">DNI {r.dni}</span>
+                    {r.error && <span className="text-xs text-red-400 truncate">{r.error}</span>}
+                    {r.enviado && <span className="text-xs text-emerald-400 ml-auto">WPP enviado</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
     </div>
   );
 };

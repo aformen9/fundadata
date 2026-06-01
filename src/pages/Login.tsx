@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router';
 import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Users, MessageCircle } from 'lucide-react';
+
+const TWILIO_WA_URL = `https://wa.me/14155238886?text=${encodeURIComponent('join music-report')}`;
 
 export const Login: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -191,13 +194,6 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          {isSignUp && (
-            <div className="mt-5 p-3.5 bg-emerald-500/5 border border-emerald-500/15 rounded-2xl text-center">
-              <p className="text-xs text-slate-400 leading-relaxed">
-                💡 El <span className="text-emerald-400 font-semibold">primer usuario</span> en registrarse se convierte automáticamente en administrador de la Fundación.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Soy tutor button */}
@@ -221,11 +217,9 @@ export const Login: React.FC = () => {
                 <p className="text-sm text-slate-300 text-center leading-relaxed">
                   Si tu número <span className="text-emerald-400 font-semibold">no se encuentra registrado</span>, escanee el siguiente QR:
                 </p>
-                <img
-                  src="/qr-tutor.png"
-                  alt="QR de registro WhatsApp"
-                  className="w-44 h-44 rounded-2xl border border-slate-700/50 object-contain bg-white p-1"
-                />
+                <div className="w-44 h-44 rounded-2xl border border-slate-700/50 bg-white p-2 flex items-center justify-center">
+                  <QRCodeSVG value={TWILIO_WA_URL} size={160} />
+                </div>
               </div>
 
               {/* Right: Support */}

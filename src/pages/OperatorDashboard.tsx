@@ -448,18 +448,25 @@ export const OperatorDashboard: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
 
-    const { data: monthRecords } = await supabase
-      .from('registro_asistencia')
-      .select('dni, fecha, presente')
-      .eq('dispositivo_id', dispositivoId)
-      .gte('fecha', monthStart)
-      .lte('fecha', today)
-      .order('fecha', { ascending: false });
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+
+    const [{ data: monthRecords }, { data: recentRecords }] = await Promise.all([
+      supabase.from('registro_asistencia').select('dni, fecha, presente')
+        .eq('dispositivo_id', dispositivoId).gte('fecha', monthStart).lte('fecha', today).order('fecha', { ascending: false }),
+      supabase.from('registro_asistencia').select('dni, fecha, presente')
+        .eq('dispositivo_id', dispositivoId).gte('fecha', thirtyDaysAgo).lte('fecha', today).order('fecha', { ascending: false }),
+    ]);
 
     const byPerson: Record<string, { fecha: string; presente: boolean }[]> = {};
     for (const r of (monthRecords || [])) {
       if (!byPerson[r.dni]) byPerson[r.dni] = [];
       byPerson[r.dni].push({ fecha: r.fecha, presente: r.presente });
+    }
+
+    const byPersonRecent: Record<string, { fecha: string; presente: boolean }[]> = {};
+    for (const r of (recentRecords || [])) {
+      if (!byPersonRecent[r.dni]) byPersonRecent[r.dni] = [];
+      byPersonRecent[r.dni].push({ fecha: r.fecha, presente: r.presente });
     }
 
     let totalRegistros = 0, totalPresentes = 0, faltasCriticas = 0;
@@ -472,9 +479,9 @@ export const OperatorDashboard: React.FC = () => {
       const faltasMes = records.filter(r => !r.presente).length;
       totalRegistros += records.length;
       totalPresentes += records.filter(r => r.presente).length;
-      const sorted = [...records].sort((a, b) => b.fecha.localeCompare(a.fecha));
+      const recentSorted = [...(byPersonRecent[person.dni] || [])].sort((a, b) => b.fecha.localeCompare(a.fecha));
       let consecutivas = 0;
-      for (const r of sorted) { if (!r.presente) consecutivas++; else break; }
+      for (const r of recentSorted) { if (!r.presente) consecutivas++; else break; }
       if (consecutivas >= 2) faltasCriticas++;
       return { dni: person.dni, nombre: person.nombre, apellido: person.apellido, faltasMes, consecutivasActuales: consecutivas };
     });

@@ -253,18 +253,27 @@ export const FoundationDashboard: React.FC = () => {
     const today = new Date().toISOString().split('T')[0];
     const monthStart = today.substring(0, 7) + '-01';
 
-    const { data: monthAttendance } = await supabase
-      .from('registro_asistencia')
-      .select('dni, dispositivo_id, fecha, presente')
-      .gte('fecha', monthStart)
-      .lte('fecha', today)
-      .order('fecha', { ascending: false });
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+
+    const [{ data: monthAttendance }, { data: recentAttendance }] = await Promise.all([
+      supabase.from('registro_asistencia').select('dni, dispositivo_id, fecha, presente')
+        .gte('fecha', monthStart).lte('fecha', today).order('fecha', { ascending: false }),
+      supabase.from('registro_asistencia').select('dni, dispositivo_id, fecha, presente')
+        .gte('fecha', thirtyDaysAgo).lte('fecha', today).order('fecha', { ascending: false }),
+    ]);
 
     const byPersonDevice: Record<string, { fecha: string; presente: boolean }[]> = {};
     for (const r of (monthAttendance || [])) {
       const key = `${r.dni}:${r.dispositivo_id}`;
       if (!byPersonDevice[key]) byPersonDevice[key] = [];
       byPersonDevice[key].push({ fecha: r.fecha, presente: r.presente });
+    }
+
+    const byPersonDeviceRecent: Record<string, { fecha: string; presente: boolean }[]> = {};
+    for (const r of (recentAttendance || [])) {
+      const key = `${r.dni}:${r.dispositivo_id}`;
+      if (!byPersonDeviceRecent[key]) byPersonDeviceRecent[key] = [];
+      byPersonDeviceRecent[key].push({ fecha: r.fecha, presente: r.presente });
     }
 
     const activeRecords = records.filter(r => r.estado === 'activo');
@@ -280,9 +289,9 @@ export const FoundationDashboard: React.FC = () => {
       const key = `${person.dni}:${person.dispositivo_id}`;
       const personRecords = byPersonDevice[key] || [];
       const faltasMes = personRecords.filter(r => !r.presente).length;
-      const sorted = [...personRecords].sort((a, b) => b.fecha.localeCompare(a.fecha));
+      const recentSorted = [...(byPersonDeviceRecent[key] || [])].sort((a, b) => b.fecha.localeCompare(a.fecha));
       let consecutivas = 0;
-      for (const r of sorted) { if (!r.presente) consecutivas++; else break; }
+      for (const r of recentSorted) { if (!r.presente) consecutivas++; else break; }
 
       globalTotalReg += personRecords.length;
       globalTotalPres += personRecords.filter(r => r.presente).length;

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
-import { ShieldAlert, LogOut, Clock, Loader2 } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { ShieldAlert, LogOut, Clock, Loader2, MessageCircle } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,6 +11,17 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
   const { user, role, loading, signOut } = useAuth();
+
+  useEffect(() => {
+    if (user && role === null) {
+      supabase.from('user_roles').insert({
+        user_id: user.id,
+        role: 'pendiente',
+        email: user.email,
+        activo: false,
+      }).then(() => {});
+    }
+  }, [user, role]);
 
   if (loading) {
     return (
@@ -41,10 +53,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
           <p className="text-slate-400 text-sm mb-6 leading-relaxed">
             Tu cuenta fue creada correctamente. Comunicate con la Fundación para que te asignen un rol de operador y un centro de trabajo.
           </p>
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 mb-6 text-left">
-            <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tu User ID</span>
-            <code className="text-xs font-mono text-emerald-400 break-all">{user.id}</code>
-          </div>
+          <a
+            href={`https://wa.me/5493471570122?text=${encodeURIComponent(`Hola, me registré en FundaData con el correo ${user.email} y necesito que me asignen un centro de trabajo.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full mb-4 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-600 hover:to-teal-500 text-slate-950 font-black text-sm rounded-2xl transition-all duration-200 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Contactar a soporte por WhatsApp
+          </a>
           <button
             onClick={() => signOut()}
             className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-2xl transition-all duration-200 flex items-center justify-center gap-2 font-semibold text-sm"
