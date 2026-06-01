@@ -59,7 +59,9 @@ CREATE TABLE IF NOT EXISTS public.notificacion_log (
   created_at     TIMESTAMPTZ DEFAULT now()
 );
 
--- Función que detecta niños con 2 días consecutivos de falta (para la Edge Function)
+-- Función que detecta niños con 2+ días de ausencia para notificar indefinidamente.
+-- Envía mensaje cada día que el niño sigue ausente (día 2, 3, 4...).
+-- Tolera días sin registro (fines de semana, feriados) comparando contra el último registro previo.
 CREATE OR REPLACE FUNCTION public.get_consecutive_absences(p_today DATE, p_yesterday DATE)
 RETURNS TABLE(
   dni TEXT,
@@ -81,13 +83,23 @@ RETURNS TABLE(
   JOIN tutor t ON t.dni_nino = ra.dni
   WHERE ra.presente = false
     AND ra.fecha = p_today
+    -- El último registro PREVIO a hoy también fue ausente.
+    -- Usar el último registro real (no necesariamente ayer exacto)
+    -- para tolerar fines de semana y feriados sin carga de asistencia.
     AND EXISTS (
       SELECT 1 FROM registro_asistencia ra2
       WHERE ra2.dni = ra.dni
         AND ra2.dispositivo_id = ra.dispositivo_id
-        AND ra2.fecha = p_yesterday
         AND ra2.presente = false
+        AND ra2.fecha = (
+          SELECT MAX(ra3.fecha)
+          FROM registro_asistencia ra3
+          WHERE ra3.dni = ra.dni
+            AND ra3.dispositivo_id = ra.dispositivo_id
+            AND ra3.fecha < p_today
+        )
     )
+    -- No se envió notificación exitosa hoy para este niño
     AND NOT EXISTS (
       SELECT 1 FROM notificacion_log nl
       WHERE nl.dni = ra.dni

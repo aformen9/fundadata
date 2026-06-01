@@ -181,7 +181,7 @@ export const OperatorDashboard: React.FC = () => {
             .maybeSingle();
           if (fn) {
             let obs: FichaNinezObservaciones = {};
-            try { obs = JSON.parse(fn.observaciones || '{}'); } catch (e) {}
+            try { obs = JSON.parse(fn.observaciones || '{}'); } catch (e) { }
             details = {
               escolarizado: fn.escolarizado,
               discapacidad: fn.discapacidad,
@@ -209,7 +209,7 @@ export const OperatorDashboard: React.FC = () => {
             .maybeSingle();
           if (fd) {
             let obs: FichaDiaObservaciones = {};
-            try { obs = JSON.parse(fd.observaciones || '{}'); } catch (e) {}
+            try { obs = JSON.parse(fd.observaciones || '{}'); } catch (e) { }
             details = {
               tiene_cud: fd.tiene_cud,
               limitacion_permanente: fd.limitacion_permanente,
@@ -749,11 +749,10 @@ export const OperatorDashboard: React.FC = () => {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <span className={`text-[10px] px-2.5 py-1 rounded-lg uppercase font-black tracking-widest ${
-                dispositivoTipo === 'ninez'
+              <span className={`text-[10px] px-2.5 py-1 rounded-lg uppercase font-black tracking-widest ${dispositivoTipo === 'ninez'
                   ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                   : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'
-              }`}>
+                }`}>
                 {dispositivoTipo === 'ninez' ? 'Centro de Niñez' : 'Centro de Día'}
               </span>
             </div>
@@ -863,7 +862,7 @@ export const OperatorDashboard: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="space-y-3">{[1,2,3].map(n => <div key={n} className="h-20 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />)}</div>
+              <div className="space-y-3">{[1, 2, 3].map(n => <div key={n} className="h-20 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />)}</div>
             ) : activePeople.length === 0 ? (
               <div className="p-8 bg-slate-900 border border-slate-800 rounded-2xl text-center text-slate-500 text-sm">No hay beneficiarios activos.</div>
             ) : (
@@ -871,7 +870,7 @@ export const OperatorDashboard: React.FC = () => {
                 {activePeople.map((person) => {
                   const hasVulnerability = person.consumo_activo || person.violencia_familiar;
                   const initials = `${person.nombre[0] || ''}${person.apellido[0] || ''}`.toUpperCase();
-                  const colors = ['from-emerald-500 to-teal-400','from-violet-500 to-purple-400','from-amber-500 to-orange-400','from-sky-500 to-blue-400','from-rose-500 to-pink-400'];
+                  const colors = ['from-emerald-500 to-teal-400', 'from-violet-500 to-purple-400', 'from-amber-500 to-orange-400', 'from-sky-500 to-blue-400', 'from-rose-500 to-pink-400'];
                   const grad = colors[(person.dni.charCodeAt(0) || 0) % colors.length];
                   return (
                     <div key={person.vinculo_id} className="group p-5 bg-slate-900/80 hover:bg-slate-800/80 border border-slate-800/60 hover:border-emerald-500/30 rounded-3xl shadow-lg flex items-center justify-between gap-4 transition-all duration-200">
@@ -1325,22 +1324,20 @@ export const OperatorDashboard: React.FC = () => {
           <div className="flex gap-1 bg-slate-900/80 border border-slate-800/60 rounded-2xl p-1.5 w-fit">
             <button
               onClick={() => setAttendanceSubTab('marcar')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                attendanceSubTab === 'marcar'
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${attendanceSubTab === 'marcar'
                   ? 'bg-sky-500 text-slate-950 shadow'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               <CalendarDays className="w-4 h-4" />
               Marcar hoy
             </button>
             <button
               onClick={() => { setAttendanceSubTab('seguimiento'); loadAttendanceStats(); }}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                attendanceSubTab === 'seguimiento'
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${attendanceSubTab === 'seguimiento'
                   ? 'bg-sky-500 text-slate-950 shadow'
                   : 'text-slate-400 hover:text-white'
-              }`}
+                }`}
             >
               <ClipboardList className="w-4 h-4" />
               Seguimiento
@@ -1388,11 +1385,10 @@ export const OperatorDashboard: React.FC = () => {
                     return (
                       <div
                         key={person.dni}
-                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                          isPresente
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isPresente
                             ? 'bg-emerald-500/5 border-emerald-500/20'
                             : 'bg-red-500/5 border-red-500/20'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black text-slate-950 ${isPresente ? 'bg-emerald-400' : 'bg-red-400'}`}>
@@ -1406,11 +1402,10 @@ export const OperatorDashboard: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setTodayAttendanceMap(prev => ({ ...prev, [person.dni]: !(prev[person.dni] ?? true) }))}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                            isPresente
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isPresente
                               ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
                               : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                          }`}
+                            }`}
                         >
                           {isPresente ? (
                             <><ToggleRight className="w-4 h-4" /> Presente</>
@@ -1538,10 +1533,10 @@ export const OperatorDashboard: React.FC = () => {
                     const matchConsec = !attendanceMinConsecutive || row.consecutivasActuales >= parseInt(attendanceMinConsecutive);
                     return matchQ && matchFaltas && matchConsec;
                   }).length === 0 && (
-                    <div className="p-8 text-center text-slate-500 text-sm">
-                      No hay registros que coincidan con los filtros.
-                    </div>
-                  )}
+                      <div className="p-8 text-center text-slate-500 text-sm">
+                        No hay registros que coincidan con los filtros.
+                      </div>
+                    )}
                 </div>
               )}
             </div>
