@@ -173,7 +173,7 @@ El primer usuario en registrarse obtiene rol `fundacion` automáticamente. Los o
 Trabajo Práctico Integrador — Minería y Big Data  
 Licenciatura en Ciencias de Datos — UCA Rosario, 2026
 
-| Integrante |
+| Integrantes |
 |---|
 | Chocobares, Juan Cruz |
 | Formenti, Agustín |
