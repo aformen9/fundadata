@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guía de Usuario — FundaData</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #ffffff;
+      color: #1e293b;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── PORTADA ── */
+    .cover {
+      height: 100vh;
+      min-height: 700px;
+      background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #042f2e 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 60px 40px;
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%);
+      top: -100px; left: -100px;
+    }
+    .cover::after {
+      content: '';
+      position: absolute;
+      width: 400px; height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(45,212,191,0.1) 0%, transparent 70%);
+      bottom: -50px; right: -50px;
+    }
+    .cover-logo {
+      width: 80px; height: 80px;
+      background: linear-gradient(135deg, #10b981, #2dd4bf);
+      border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 32px;
+      font-size: 36px;
+      box-shadow: 0 20px 60px rgba(16,185,129,0.4);
+      position: relative; z-index: 1;
+    }
+    .cover h1 {
+      font-size: 52px; font-weight: 900;
+      color: #ffffff;
+      letter-spacing: -2px;
+      position: relative; z-index: 1;
+      margin-bottom: 8px;
+    }
+    .cover h1 span { color: #34d399; }
+    .cover-subtitle {
+      font-size: 18px; color: #94a3b8; font-weight: 500;
+      margin-bottom: 48px;
+      position: relative; z-index: 1;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: rgba(16,185,129,0.15);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: #34d399;
+      padding: 8px 20px;
+      border-radius: 100px;
+      font-size: 13px; font-weight: 600;
+      position: relative; z-index: 1;
+    }
+    .cover-footer {
+      position: absolute; bottom: 40px;
+      color: #475569; font-size: 12px;
+      z-index: 1;
+    }
+
+    /* ── CONTENIDO ── */
+    .page {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 60px 50px;
+    }
+
+    /* Separador entre páginas para PDF */
+    .page-break { page-break-before: always; }
+
+    /* ── ÍNDICE ── */
+    .toc { margin-bottom: 0; }
+    .toc h2 { font-size: 28px; font-weight: 800; color: #0f172a; margin-bottom: 24px; }
+    .toc-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #f1f5f9;
+      gap: 16px;
+    }
+    .toc-num {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #10b981, #2dd4bf);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 13px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .toc-label { font-size: 15px; font-weight: 600; color: #1e293b; }
+    .toc-desc { font-size: 13px; color: #64748b; margin-top: 2px; }
+
+    /* ── SECCIONES ── */
+    .section { margin-bottom: 48px; }
+    .section-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+    .section-icon {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .icon-green  { background: linear-gradient(135deg, #10b981, #2dd4bf); }
+    .icon-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+    .icon-amber  { background: linear-gradient(135deg, #f59e0b, #f97316); }
+    .icon-purple { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+    .icon-red    { background: linear-gradient(135deg, #ef4444, #f97316); }
+
+    .section-title { font-size: 22px; font-weight: 800; color: #0f172a; }
+    .section-sub   { font-size: 13px; color: #64748b; margin-top: 2px; font-weight: 500; }
+
+    p { color: #475569; margin-bottom: 12px; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── CARDS ── */
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: #1e293b;
+      margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card p { margin-bottom: 0; }
+
+    .card-green  { border-left: 4px solid #10b981; }
+    .card-blue   { border-left: 4px solid #3b82f6; }
+    .card-amber  { border-left: 4px solid #f59e0b; }
+    .card-purple { border-left: 4px solid #8b5cf6; }
+    .card-red    { border-left: 4px solid #ef4444; }
+
+    /* ── ROLES TABLE ── */
+    .roles-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .role-card {
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+    }
+    .role-card.tutor  { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .role-card.op     { background: #eff6ff; border: 1px solid #bfdbfe; }
+    .role-card.admin  { background: #fdf4ff; border: 1px solid #e9d5ff; }
+
+    .role-emoji { font-size: 32px; margin-bottom: 8px; }
+    .role-name  { font-size: 15px; font-weight: 800; margin-bottom: 6px; color: #1e293b; }
+    .role-desc  { font-size: 12px; color: #64748b; line-height: 1.5; }
+
+    /* ── STEPS ── */
+    .steps { list-style: none; }
+    .steps li {
+      display: flex; gap: 16px;
+      margin-bottom: 16px;
+    }
+    .step-num {
+      width: 28px; height: 28px; min-width: 28px;
+      background: #0f172a;
+      color: white; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+    }
+    .step-content strong { color: #1e293b; font-weight: 700; display: block; margin-bottom: 4px; }
+    .step-content p { margin: 0; }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    .badge-green  { background: #d1fae5; color: #065f46; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
+    .badge-amber  { background: #fef3c7; color: #92400e; }
+    .badge-purple { background: #ede9fe; color: #5b21b6; }
+
+    /* ── ALERT BOX ── */
+    .alert {
+      display: flex; gap: 12px;
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+    .alert-green  { background: #f0fdf4; border: 1px solid #86efac; }
+    .alert-amber  { background: #fffbeb; border: 1px solid #fcd34d; }
+    .alert-blue   { background: #eff6ff; border: 1px solid #93c5fd; }
+    .alert p { margin: 0; color: #374151; }
+
+    /* ── TWO COLUMN ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* ── PRINT ── */
+    @media print {
+      body { font-size: 13px; }
+      .cover { height: 100vh; page-break-after: always; }
+      .page-break { page-break-before: always; }
+      .page { padding: 40px 45px; }
+      @page { margin: 0; size: A4; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ PORTADA -->
+<div class="cover">
+  <div class="cover-logo">💚</div>
+  <h1>Funda<span>Data</span></h1>
+  <p class="cover-subtitle">Sistema de Gestión Comunitaria</p>
+  <div class="cover-badge">Guía de Usuario — v1.0 · Junio 2026</div>
+  <p class="cover-footer">fundadata.vercel.app · UCA Rosario · Minería y Big Data 2026</p>
+</div>
+
+<!-- ══════════════════════════════════════════ ÍNDICE -->
+<div class="page">
+  <div class="toc">
+    <h2>Contenido</h2>
+
+    <div class="toc-item">
+      <div class="toc-num">1</div>
+      <div>
+        <div class="toc-label">¿Qué es FundaData?</div>
+        <div class="toc-desc">Objetivo, acceso y roles del sistema</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">2</div>
+      <div>
+        <div class="toc-label">Panel de Tutores</div>
+        <div class="toc-desc">Cómo conectarse al sistema de notificaciones por WhatsApp</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">3</div>
+      <div>
+        <div class="toc-label">Panel del Operador</div>
+        <div class="toc-desc">Registro de beneficiarios, fichas técnicas y asistencia</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">4</div>
+      <div>
+        <div class="toc-label">Panel de la Fundación</div>
+        <div class="toc-desc">KPIs globales, expedientes y asistencia cruzada</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">5</div>
+      <div>
+        <div class="toc-label">Panel de Administración</div>
+        <div class="toc-desc">Gestión de operadores y alertas manuales</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">6</div>
+      <div>
+        <div class="toc-label">Alertas automáticas por WhatsApp</div>
+        <div class="toc-desc">Cómo funciona la detección de inasistencias críticas</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">7</div>
+      <div>
+        <div class="toc-label">Preguntas frecuentes</div>
+        <div class="toc-desc">Errores comunes y cómo resolverlos</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 1. QUÉ ES -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-green">💡</div>
+      <div>
+        <div class="section-title">1. ¿Qué es FundaData?</div>
+        <div class="section-sub">Plataforma centralizada para centros comunitarios</div>
+      </div>
+    </div>
+
+    <p>FundaData es una plataforma web que permite gestionar beneficiarios, asistencia y alertas en múltiples centros comunitarios desde un único lugar. Reemplaza las planillas Excel independientes por una base de datos centralizada con roles diferenciados y notificaciones automáticas.</p>
+
+    <p>La app está disponible en <strong>fundadata.vercel.app</strong> desde cualquier dispositivo con acceso a internet.</p>
+
+    <div class="roles-grid" style="margin-top: 28px;">
+      <div class="role-card tutor">
+        <div class="role-emoji">👨‍👩‍👧</div>
+        <div class="role-name">Tutor / Referente</div>
+        <div class="role-desc">Recibe notificaciones por WhatsApp cuando el beneficiario a su cargo falta dos días seguidos</div>
+      </div>
+      <div class="role-card op">
+        <div class="role-emoji">🏥</div>
+        <div class="role-name">Operador de Centro</div>
+        <div class="role-desc">Registra y edita beneficiarios, carga fichas técnicas y toma asistencia diaria</div>
+      </div>
+      <div class="role-card admin">
+        <div class="role-emoji">🏛️</div>
+        <div class="role-name">Fundación / Admin</div>
+        <div class="role-desc">Ve todos los centros, expedientes, KPIs globales y gestiona los operadores</div>
+      </div>
+    </div>
+
+    <div class="alert alert-blue" style="margin-top: 8px;">
+      <div class="alert-icon">ℹ️</div>
+      <p>El acceso a la plataforma requiere una cuenta creada por la Fundación. Si sos operador y no tenés cuenta, podés registrarte solo (ver sección 5).</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 2. TUTORES -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-green">📱</div>
+      <div>
+        <div class="section-title">2. Panel de Tutores</div>
+        <div class="section-sub">Recibir notificaciones por WhatsApp</div>
+      </div>
+    </div>
+
+    <p>Los tutores no necesitan iniciar sesión en la plataforma. Para recibir alertas de inasistencia por WhatsApp, su número debe estar registrado en el sandbox de Twilio (el servicio de mensajería que usa la app).</p>
+
+    <div class="card card-green" style="margin-top: 20px;">
+      <div class="card-title">🟢 Cómo activar las notificaciones de WhatsApp</div>
+      <p>Si el operador ya cargó tu número en la ficha del beneficiario, solo necesitás hacer este paso <strong>una única vez</strong>:</p>
+    </div>
+
+    <ul class="steps" style="margin-top: 20px;">
+      <li>
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <strong>Ir a la pantalla de inicio de FundaData</strong>
+          <p>Accedé a <strong>fundadata.vercel.app</strong> desde cualquier navegador.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <strong>Tocar "Soy tutor"</strong>
+          <p>Aparece un panel con un código QR y un botón de soporte.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <strong>Escanear el código QR con WhatsApp</strong>
+          <p>El QR abre WhatsApp con el mensaje <code>join music-report</code> ya escrito. Solo tocá <strong>Enviar</strong>.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <strong>Listo — ya estás registrado</strong>
+          <p>A partir de ese momento, recibirás un mensaje automático si el beneficiario a tu cargo falta dos días consecutivos.</p>
+        </div>
+      </li>
+    </ul>
+
+    <div class="alert alert-amber" style="margin-top: 20px;">
+      <div class="alert-icon">⚠️</div>
+      <p><strong>Importante:</strong> El sandbox de Twilio requiere este paso de activación. Sin él, los mensajes no llegan aunque el número esté cargado en el sistema.</p>
+    </div>
+
+    <div class="card" style="margin-top: 16px;">
+      <div class="card-title">❓ ¿Ya tengo el número registrado y tengo dudas?</div>
+      <p>En la misma pantalla "Soy tutor" hay un botón <strong>"Contactar a soporte"</strong> que abre WhatsApp directamente con la Fundación.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 3. OPERADOR -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">🏥</div>
+      <div>
+        <div class="section-title">3. Panel del Operador</div>
+        <div class="section-sub">Gestión diaria del centro asignado</div>
+      </div>
+    </div>
+
+    <p>El operador solo tiene acceso a los datos de su propio centro. Desde su panel puede registrar beneficiarios, completar fichas técnicas y tomar asistencia.</p>
+
+    <!-- 3.1 Registrar -->
+    <div class="card card-blue" style="margin-top: 4px;">
+      <div class="card-title">👤 Registrar un nuevo beneficiario</div>
+      <p>En la pestaña <strong>Beneficiarios → Nuevo</strong>, ingresá el DNI. El sistema verifica automáticamente si esa persona ya está activa en otro centro para evitar duplicados. Completá los datos personales y guardá.</p>
+    </div>
+
+    <!-- 3.2 Fichas -->
+    <div class="card card-blue">
+      <div class="card-title">📋 Fichas técnicas diferenciadas por tipo de centro</div>
+      <p>Después de crear el beneficiario, completá la ficha correspondiente al tipo de tu centro:</p>
+    </div>
+
+    <div class="two-col" style="margin-bottom: 16px;">
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 16px;">
+        <div style="font-size: 13px; font-weight: 700; color: #0369a1; margin-bottom: 8px;">🧒 Centro de Niñez</div>
+        <ul style="color: #475569; font-size: 13px; padding-left: 16px; line-height: 1.8;">
+          <li>Nivel de escolarización</li>
+          <li>Discapacidad (tipo y CUD)</li>
+          <li>Referencia al sistema de salud</li>
+          <li>Indicadores de vulnerabilidad</li>
+          <li>Consumo y violencia familiar (campo sensible)</li>
+        </ul>
+      </div>
+      <div style="background: #fdf4ff; border: 1px solid #e9d5ff; border-radius: 12px; padding: 16px;">
+        <div style="font-size: 13px; font-weight: 700; color: #7c3aed; margin-bottom: 8px;">🧓 Centro de Día (adultos mayores)</div>
+        <ul style="color: #475569; font-size: 13px; padding-left: 16px; line-height: 1.8;">
+          <li>Obra social y cobertura médica</li>
+          <li>Medicación habitual</li>
+          <li>Movilidad y autonomía</li>
+          <li>Diagnósticos y CUD</li>
+          <li>Situación social y familiar</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 3.3 Tutores -->
+    <div class="card card-blue">
+      <div class="card-title">📞 Agregar tutores / referentes</div>
+      <p>Podés cargar hasta <strong>3 tutores o referentes</strong> por beneficiario, cada uno con su nombre y número de WhatsApp. Todos los tutores cargados recibirán la alerta si corresponde.</p>
+    </div>
+
+    <!-- 3.4 Asistencia -->
+    <div class="card card-blue">
+      <div class="card-title">✅ Registro de asistencia</div>
+      <p>En la pestaña <strong>Asistencia</strong> se muestra la lista del día con casillas de presente/ausente. Podés navegar por fechas anteriores para editar en forma retroactiva. El sistema detecta automáticamente quiénes tienen <span class="badge badge-blue">2 días consecutivos</span> de falta y los marca como críticos.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 4. FUNDACIÓN -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-purple">🏛️</div>
+      <div>
+        <div class="section-title">4. Panel de la Fundación</div>
+        <div class="section-sub">Vista global de todos los centros</div>
+      </div>
+    </div>
+
+    <p>El rol Fundación tiene acceso completo a todos los centros. Desde su panel puede monitorear KPIs globales, revisar expedientes individuales y ver el estado de asistencia en tiempo real.</p>
+
+    <div class="card card-purple">
+      <div class="card-title">📊 KPIs globales</div>
+      <p>El dashboard muestra: total de beneficiarios activos, porcentaje escolarizados, porcentaje con CUD, porcentaje con consumo declarado y porcentaje con situación de violencia familiar. También incluye gráficos de distribución por centro y pirámide de edad y sexo.</p>
+    </div>
+
+    <div class="card card-purple">
+      <div class="card-title">📁 Expediente individual con auditoría</div>
+      <p>Al hacer clic en cualquier beneficiario se abre su expediente completo con todos los datos y una <strong>línea de tiempo de auditoría</strong> que muestra cada cambio realizado, quién lo hizo y cuándo. Ideal para seguimiento y control.</p>
+    </div>
+
+    <div class="card card-purple">
+      <div class="card-title">📋 Tabla centralizada filtrable</div>
+      <p>Lista de todos los beneficiarios de todos los centros. Se puede filtrar por centro, barrio, estado (activo/inactivo) y rango de fecha de alta.</p>
+    </div>
+
+    <div class="card card-purple">
+      <div class="card-title">📅 Asistencia global y faltas críticas</div>
+      <p>Vista de asistencia cruzada entre centros. Resalta automáticamente los beneficiarios con 2 o más días consecutivos de inasistencia, con una ventana de <strong>30 días</strong> para detectar ausencias que cruzan el límite de mes.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 5. ADMIN -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-amber">⚙️</div>
+      <div>
+        <div class="section-title">5. Panel de Administración</div>
+        <div class="section-sub">Gestión de operadores y alertas</div>
+      </div>
+    </div>
+
+    <p>El panel de administración permite gestionar los accesos de los operadores y disparar alertas manualmente. Es accesible solo para el rol Fundación.</p>
+
+    <div class="card card-amber">
+      <div class="card-title">👷 Crear operadores directamente</div>
+      <p>La Fundación puede crear cuentas de operador ingresando email, contraseña temporal y asignando el centro. El operador recibe sus credenciales y puede entrar de inmediato.</p>
+    </div>
+
+    <div class="card card-amber">
+      <div class="card-title">⏳ Accesos pendientes (auto-registro)</div>
+      <p>Si un operador se registra solo desde la pantalla de login, su cuenta queda en estado <span class="badge badge-amber">PENDIENTE</span>. Aparece en la sección <strong>"Accesos Pendientes"</strong> del panel admin, donde la Fundación le asigna un centro y lo activa con un clic. Mientras tanto, el operador ve una pantalla con un botón para contactar a la Fundación por WhatsApp.</p>
+    </div>
+
+    <div class="card card-amber">
+      <div class="card-title">🔔 Disparo manual de alertas</div>
+      <p>El botón <strong>"Enviar alertas ahora"</strong> ejecuta inmediatamente el mismo proceso que corre automáticamente cada día. Muestra el resultado por beneficiario: DNI, si el WhatsApp fue enviado y cualquier error.</p>
+    </div>
+
+    <div class="alert alert-green" style="margin-top: 8px;">
+      <div class="alert-icon">✅</div>
+      <p>El sistema evita duplicados: si ya se envió una alerta a un tutor hoy, no se vuelve a enviar aunque se presione el botón de disparo manual.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 6. ALERTAS -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-green">📨</div>
+      <div>
+        <div class="section-title">6. Alertas automáticas por WhatsApp</div>
+        <div class="section-sub">Cómo funciona la detección de inasistencias críticas</div>
+      </div>
+    </div>
+
+    <p>El sistema detecta automáticamente situaciones de riesgo y notifica a los tutores/referentes sin intervención manual.</p>
+
+    <ul class="steps" style="margin-top: 20px;">
+      <li>
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <strong>El operador carga la asistencia diaria</strong>
+          <p>Marca presentes y ausentes en su panel cada día hábil.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <strong>El sistema evalúa inasistencias consecutivas</strong>
+          <p>Todos los días a las 12:00 hs (hora Argentina), el sistema busca beneficiarios que faltaron hoy <strong>y</strong> también faltaron en su último día de registro anterior (no necesariamente ayer — tolera fines de semana y feriados sin carga).</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <strong>Se envía WhatsApp al tutor/referente</strong>
+          <p>Cada tutor cargado en la ficha recibe un mensaje automático informando la situación del beneficiario a su cargo.</p>
+        </div>
+      </li>
+      <li>
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <strong>Se registra el envío para evitar duplicados</strong>
+          <p>El sistema guarda un log. Si el operador presiona el botón manual o la alerta corre de nuevo, no se duplica el mensaje.</p>
+        </div>
+      </li>
+    </ul>
+
+    <div class="two-col" style="margin-top: 24px;">
+      <div class="alert alert-amber" style="margin-bottom: 0;">
+        <div class="alert-icon">⚠️</div>
+        <p><strong>Requisito del tutor:</strong> El tutor debe haber activado el sandbox de Twilio (paso del QR) para recibir los mensajes.</p>
+      </div>
+      <div class="alert alert-blue" style="margin-bottom: 0;">
+        <div class="alert-icon">📆</div>
+        <p><strong>Ventana de 30 días:</strong> Se detectan ausencias que cruzan el límite de mes (ej.: faltó el 31/mayo y el 1/junio).</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ 7. FAQ -->
+<div class="page page-break">
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-red">❓</div>
+      <div>
+        <div class="section-title">7. Preguntas frecuentes</div>
+        <div class="section-sub">Situaciones comunes y cómo resolverlas</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">No recibo mensajes de WhatsApp siendo tutor</div>
+      <p>1) Verificar que el operador cargó tu número correctamente en la ficha del beneficiario.<br>
+      2) Verificar que hiciste el paso del QR y enviaste <code>join music-report</code>.<br>
+      3) El sandbox de Twilio puede vencer — si pasaron más de 72 hs sin actividad, repetir el paso del QR.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">El beneficiario ya existe en otro centro</div>
+      <p>El sistema bloquea el registro si el DNI ya está activo en otro centro. Contactar a la Fundación para dar de baja el vínculo anterior antes de crear uno nuevo.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Me registré solo y veo "Rol Pendiente"</div>
+      <p>Tu cuenta fue creada pero falta asignación de centro. Usá el botón de WhatsApp que aparece en esa pantalla para contactar a la Fundación. El administrador te verá en "Accesos Pendientes" y te activará.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">No puedo ver datos de otro centro siendo operador</div>
+      <p>Es correcto — los operadores solo ven su propio centro. Esta restricción es intencional y está aplicada a nivel de base de datos (Row Level Security). Para ver todos los centros se necesita el rol Fundación.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">El botón de alertas dice "No hay inasistencias consecutivas"</div>
+      <p>Significa que hoy ningún beneficiario cumple la condición (falta hoy + faltó el último día registrado anterior). También puede significar que ya se envió la alerta hoy y está bloqueada por el log de duplicados.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">¿Cómo edito un registro de asistencia de días anteriores?</div>
+      <p>En la pestaña Asistencia del panel operador, usá las flechas de navegación de fechas para ir al día que querés editar y activá el modo edición. Guardá los cambios.</p>
+    </div>
+
+    <div style="margin-top: 40px; padding: 24px; background: linear-gradient(135deg, #f0fdf4, #ecfdf5); border: 1px solid #86efac; border-radius: 16px; text-align: center;">
+      <div style="font-size: 24px; margin-bottom: 8px;">💚</div>
+      <div style="font-size: 16px; font-weight: 800; color: #064e3b; margin-bottom: 16px;">¿Más preguntas?</div>
+      <a href="https://wa.me/5493471570122" target="_blank" rel="noopener noreferrer"
+        style="display: inline-flex; align-items: center; gap: 10px; padding: 14px 28px; background: linear-gradient(135deg, #10b981, #2dd4bf); color: #022c22; font-weight: 800; font-size: 15px; border-radius: 100px; text-decoration: none; box-shadow: 0 8px 24px rgba(16,185,129,0.35);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Contactar soporte por WhatsApp
+      </a>
+    </div>
+  </div>
+
+  <div style="margin-top: 60px; padding-top: 24px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 12px;">
+    FundaData · Sistema de Gestión Comunitaria · UCA Rosario 2026<br>
+    Trabajo Práctico Integrador — Minería y Big Data<br>
+    Chocobares · Formenti · Morenico · Mendes
+  </div>
+</div>
+
+</body>
+</html>

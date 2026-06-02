@@ -3,7 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router';
-import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Users, MessageCircle } from 'lucide-react';
+import { Heart, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, Users, MessageCircle, BookOpen } from 'lucide-react';
 
 const TWILIO_WA_URL = `https://wa.me/14155238886?text=${encodeURIComponent('join music-report')}`;
 
@@ -205,6 +205,17 @@ export const Login: React.FC = () => {
           <Users className="w-4 h-4" />
           {showTutorPanel ? 'Cerrar' : 'Soy tutor'}
         </button>
+
+        {/* Guía de uso button */}
+        <a
+          href="/guia-fundadata.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-emerald-500/15 to-teal-400/15 border border-emerald-500/30 text-emerald-400 hover:from-emerald-500/25 hover:to-teal-400/25 hover:border-emerald-500/50 transition-all text-sm font-semibold"
+        >
+          <BookOpen className="w-4 h-4" />
+          Guía de uso
+        </a>
       </div>
 
       {/* Tutor panel */}
